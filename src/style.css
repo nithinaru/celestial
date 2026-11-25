@@ -21,3 +21,20 @@ body {
   cursor: pointer;
   pointer-events: auto;
 }
+
+/* grab point where the night line crosses the equator */
+.night-handle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(160, 175, 255, 0.9);
+  background: rgba(20, 24, 60, 0.6);
+  box-shadow: 0 0 12px rgba(140, 158, 255, 0.6);
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+.night-handle:active {
+  cursor: grabbing;
+}

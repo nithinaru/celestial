@@ -13,6 +13,8 @@ npm run dev
 |---|---|
 | `src/data/skyEvents.ts` | `getSkyEvents()` returns normalized `SkyEvent[]`; `watchIss()` ticks the live ISS position every second |
 | `src/globe/createGlobe.ts` | globe.gl rendering only, no UI chrome |
+| `src/globe/dayNightMaterial.ts` | globe shader: city lights at night, dimmed day map, glowing night line |
+| `src/sky/sun.ts` | subsolar point from the date, and how dark any spot is |
 | `src/main.ts` | wires data → globe, holds `state` |
 | `api/fireball.ts` | Vercel function proxying JPL (no CORS); `vite.config.ts` mirrors it in dev |
 | `public/fallback/*.json` | snapshots used when a live feed fails, so the demo never breaks |
@@ -29,6 +31,16 @@ window.addEventListener('celestial:select', (e) => {
 ```
 
 `intensity` means: aurora = probability (0–100), fireball = impact energy (kt), ISS = altitude (km).
+
+The night line follows the real sun. Drag the ring where it crosses the equator to move it; double-click the ring to return to real time. Events fade the further they sit from darkness (civil twilight, sun 6° below the horizon). Each move fires:
+
+```ts
+window.addEventListener('celestial:sun', (e) => {
+  const { sun, overridden } = (e as CustomEvent).detail; // sun = subsolar { lat, lng }
+});
+```
+
+Sun math check: `node src/sky/sun.check.ts`
 
 ## Data sources
 
