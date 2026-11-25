@@ -1,7 +1,7 @@
 import Globe from 'globe.gl';
 import { Vector3 } from 'three';
 import type { SkyEvent } from '../data/skyEvents';
-import { darkness, wrapLng, type LatLng } from '../sky/sun';
+import { angularDistance, darkness, wrapLng, type LatLng } from '../sky/sun';
 import { createDayNightMaterial } from './dayNightMaterial';
 
 export interface SkyGlobe {
@@ -9,15 +9,19 @@ export interface SkyGlobe {
   setIss(iss: SkyEvent, trail: LatLng[]): void;
   /** Move the sun (and so the night line). Events dim the further they are from darkness. */
   setSun(sun: LatLng): void;
-  onSelect(cb: (event: SkyEvent) => void): void;
+  /** An event was clicked; null = clicked empty globe. */
+  onSelect(cb: (event: SkyEvent | null) => void): void;
   /** User dragged the night line to a new sun position; null = double-clicked to return to real time. */
   onSunDrag(cb: (sun: LatLng | null) => void): void;
+  /** Show fireballs as of this moment (ms): ones that hadn't happened yet are hidden. */
+  setFireballTime(t: number): void;
 }
 
 const FIREBALL_RGB = '255, 90, 54'; // redder than the sodium-orange city lights on the night texture
 const ISS_RGB = '232, 244, 255';
 const DAY_OPACITY = 0.15; // how much of an event survives in daylight
 const AURORA_RECOMPUTE_MS = 200; // heatmap KDE is async + heavy; redo it once dragging settles
+const AURORA_PICK_DEG = 3; // aurora cells are 2° apart; a click within 3° counts as on the glow
 
 /** Where the night line crosses the equator: grab points for dragging it. */
 interface Handle {
@@ -30,7 +34,7 @@ const SIDE_OFFSET = { dusk: 90, dawn: -90 } as const; // degrees east of the sub
 
 /** Globe rendering only: real-sun terminator, aurora heat layer, fireball points, moving ISS. No UI chrome. */
 export function createGlobe(el: HTMLElement): SkyGlobe {
-  let onSelect: (event: SkyEvent) => void = () => {};
+  let onSelect: (event: SkyEvent | null) => void = () => {};
   let onSunDrag: (sun: LatLng | null) => void = () => {};
   // globe.gl stashes its three.js objects on our data (__threeObj*); hand out a clean copy
   const selectCb = (d: object) =>
@@ -38,6 +42,23 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
 
   let sun: LatLng = { lat: 0, lng: 0 };
   const lit = (p: LatLng) => DAY_OPACITY + (1 - DAY_OPACITY) * darkness(p, sun);
+
+  let fireballs: SkyEvent[] = [];
+  let aurora: SkyEvent[] = [];
+
+  // The heatmap has no per-point hit testing, so a globe click picks the nearest visible aurora cell.
+  const pickAurora = (p: LatLng) => {
+    let best: SkyEvent | null = null;
+    let bestDist = AURORA_PICK_DEG;
+    for (const a of aurora) {
+      const dist = angularDistance(p, a);
+      if (dist < bestDist && darkness(a, sun) > 0) [best, bestDist] = [a, dist];
+    }
+    return best;
+  };
+  let fireballTime = Date.now();
+  const showFireballs = () =>
+    globe.pointsData(fireballs.filter((e) => Date.parse(e.time) <= fireballTime));
 
   const material = createDayNightMaterial();
   const handles: Handle[] = [
@@ -61,6 +82,11 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     .pointColor((d) => `rgba(${FIREBALL_RGB}, ${lit(d as SkyEvent)})`)
     .pointLabel((d) => (d as SkyEvent).label)
     .onPointClick((d) => selectCb(d))
+    .onGlobeClick((p) => {
+      const hit = pickAurora(p);
+      if (hit) selectCb(hit);
+      else onSelect(null);
+    })
     .pointsTransitionDuration(0)
     // the aurora heatmap is a full-sphere shell above the points; let clicks pass through it
     .pointerEventsFilter((obj) => (obj as { __globeObjType?: string }).__globeObjType !== 'heatmap')
@@ -97,6 +123,8 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     issDot.className = 'iss-dot';
     issDot.title = (d as SkyEvent).label;
     issDot.onclick = () => selectCb(d);
+    // the globe counts a click from pointerdown on its container; don't let it also see an empty-globe click
+    issDot.onpointerdown = (e) => e.stopPropagation();
     return issDot;
   }
 
@@ -133,8 +161,10 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
 
   return {
     setEvents(events) {
-      globe.pointsData(events.filter((e) => e.type === 'fireball'));
-      globe.heatmapsData([events.filter((e) => e.type === 'aurora')]);
+      fireballs = events.filter((e) => e.type === 'fireball');
+      showFireballs();
+      aurora = events.filter((e) => e.type === 'aurora');
+      globe.heatmapsData([aurora]);
     },
     setIss(iss, trail) {
       // keep one object so globe.gl reuses the html element instead of rebuilding it each second
@@ -165,6 +195,10 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     },
     onSunDrag(cb) {
       onSunDrag = cb;
+    },
+    setFireballTime(t) {
+      fireballTime = t;
+      showFireballs();
     },
   };
 }

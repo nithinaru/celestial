@@ -37,9 +37,14 @@ export function wrapLng(lng: number): number {
  * (sun from 0° to 6° below the horizon), when the sky actually goes dark.
  */
 export function darkness(p: LatLng, sun: LatLng): number {
-  const cosZenith =
-    Math.sin(p.lat * RAD) * Math.sin(sun.lat * RAD) +
-    Math.cos(p.lat * RAD) * Math.cos(sun.lat * RAD) * Math.cos((p.lng - sun.lng) * RAD);
-  const sunAltitude = 90 - Math.acos(Math.max(-1, Math.min(1, cosZenith))) / RAD;
+  const sunAltitude = 90 - angularDistance(p, sun);
   return Math.max(0, Math.min(1, -sunAltitude / 6));
+}
+
+/** Great-circle distance in degrees. */
+export function angularDistance(a: LatLng, b: LatLng): number {
+  const cos =
+    Math.sin(a.lat * RAD) * Math.sin(b.lat * RAD) +
+    Math.cos(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.cos((a.lng - b.lng) * RAD);
+  return Math.acos(Math.max(-1, Math.min(1, cos))) / RAD;
 }

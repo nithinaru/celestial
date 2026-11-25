@@ -38,3 +38,37 @@ body {
 .night-handle:active {
   cursor: grabbing;
 }
+
+/* fireball history slider, in the poster's inks; sits under the wordmark, clear of the day scrubber */
+.time-slider {
+  position: fixed;
+  left: clamp(20px, 3.4vw, 56px);
+  top: calc(clamp(20px, 3.4vw, 56px) + 120px);
+  width: min(280px, calc(100vw - 2 * clamp(20px, 3.4vw, 56px)));
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--ink-type, #f1e6c8);
+  z-index: 11; /* above .cel-ui, which ignores pointer events */
+}
+.time-slider::before {
+  content: 'Fireballs as of';
+  grid-column: 1 / -1;
+  font: 18px/1 var(--font-poster, sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.time-slider input {
+  accent-color: var(--ink-fire, #e8743b);
+  margin: 0;
+}
+.time-slider output {
+  font: 700 16px/1 var(--font-dot, monospace);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+/* the event card takes this corner on narrow screens; same rule the legend uses */
+body:has(.cel-card) .time-slider {
+  display: none;
+}
