@@ -16,20 +16,23 @@ npm run dev
 | `src/globe/dayNightMaterial.ts` | globe shader: city lights at night, dimmed day map, glowing night line |
 | `src/sky/sun.ts` | subsolar point from the date, and how dark any spot is |
 | `src/ui/timeSlider.ts` | bare fireball time scrubber |
+| `src/ui/detailCard.ts` | bare event detail card |
 | `src/main.ts` | wires data → globe, holds `state` |
 | `api/fireball.ts` | Vercel function proxying JPL (no CORS); `vite.config.ts` mirrors it in dev |
 | `public/fallback/*.json` | snapshots used when a live feed fails, so the demo never breaks |
 
 ## Hooking up UI
 
-Clicking an event sets `state.selected` and fires a window event:
+Clicking an event sets `state.selected`, opens the bare card in `src/ui/detailCard.ts`, and fires a window event. Clicking empty globe, the card's ×, or Escape sends `null`:
 
 ```ts
 window.addEventListener('celestial:select', (e) => {
-  const event = (e as CustomEvent<SkyEvent>).detail;
-  // { id, type: 'aurora' | 'fireball' | 'iss', lat, lng, time, intensity, label, details }
+  const event = (e as CustomEvent<SkyEvent | null>).detail;
+  // { id, type: 'aurora' | 'fireball' | 'iss', lat, lng, time, intensity, label, details } or null
 });
 ```
+
+The aurora heatmap can't be hit-tested per point, so a click picks the nearest aurora cell within 3° that is currently dark. The card renders with `textContent` only, since every value comes from an outside feed. Restyle it via `.detail-card`, `[data-type]` and the `detail-card__*` classes, or hide it and render your own from the event.
 
 `intensity` means: aurora = probability (0–100), fireball = impact energy (kt), ISS = altitude (km).
 

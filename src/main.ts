@@ -2,6 +2,7 @@ import './style.css';
 import { getSkyEvents, watchIss, type SkyEvent } from './data/skyEvents';
 import { createGlobe } from './globe/createGlobe';
 import { subsolarPoint, type LatLng } from './sky/sun';
+import { createDetailCard } from './ui/detailCard';
 import { createTimeSlider } from './ui/timeSlider';
 
 // App state lives here; the Paper design will render UI from it.
@@ -37,12 +38,14 @@ setInterval(() => {
 }, 60_000);
 globe.onSunDrag((sun) => (sun ? setSun(sun, true) : setSun(subsolarPoint(new Date()), false)));
 
-// Detail cards (step 4) listen for this; for now it only updates state.
-globe.onSelect((event) => {
+// One path for every selection change: globe clicks, the card's ×, Escape, clicking empty globe.
+const select = (event: SkyEvent | null) => {
   state.selected = event;
+  card.show(event);
   window.dispatchEvent(new CustomEvent('celestial:select', { detail: event }));
-  console.log('[celestial] selected', event);
-});
+};
+const card = createDetailCard(document.body, () => select(null));
+globe.onSelect(select);
 
 state.events = await getSkyEvents();
 globe.setEvents(state.events);
