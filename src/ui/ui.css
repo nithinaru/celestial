@@ -85,19 +85,19 @@
   bottom: 210px;
   display: grid;
   grid-template-columns: auto 1fr;
-  column-gap: 28px;
+  column-gap: 16px;
   align-items: center;
-  max-width: 460px;
+  max-width: 300px;
 }
 .cel-counter__n {
-  font-size: clamp(96px, 11vw, 150px);
+  font-size: clamp(52px, 5.5vw, 76px);
   line-height: 0.8;
   color: var(--ink-aurora);
 }
 .cel-counter__words {
   font-weight: 900;
-  font-size: clamp(24px, 2.6vw, 36px);
-  line-height: 1.05;
+  font-size: clamp(15px, 1.4vw, 19px);
+  line-height: 1.1;
   max-width: 9.5em;
 }
 .cel-counter__also {

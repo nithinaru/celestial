@@ -1,4 +1,4 @@
-import { CanvasTexture, Color, LinearFilter, SRGBColorSpace, ShaderMaterial, TextureLoader, Vector2, Vector3 } from 'three';
+import { CanvasTexture, Color, LinearFilter, ShaderMaterial, TextureLoader, Vector2, Vector3 } from 'three';
 
 /**
  * The Earth as a plate from an old astronomy atlas: flat ink, no lighting, no shine.
@@ -22,10 +22,9 @@ export function createDayNightMaterial() {
   const material = new ShaderMaterial({
     uniforms: {
       landMask: { value: null },
-      // elevation (three-globe's topology map) and the satellite photo, read as data only
+      // elevation (three-globe's topology map), read as data only
       topo: { value: null },
       topoTexel: { value: new Vector2(1.5 / 2048, 1.5 / 1024) },
-      photo: { value: null },
       sunDirection: { value: new Vector3(1, 0, 0) },
       ground: { value: new Color() },
       oceanDay: { value: new Color() },
@@ -49,7 +48,7 @@ export function createDayNightMaterial() {
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform sampler2D landMask, topo, photo;
+      uniform sampler2D landMask, topo;
       uniform vec2 topoTexel;
       uniform vec3 sunDirection;
       uniform vec3 ground, oceanDay, oceanNight, landDay, landNight, line;
@@ -83,12 +82,9 @@ export function createDayNightMaterial() {
         vec3 L = normalize(vec3(-0.55, 0.55, 0.62));
         float shade = dot(normalize(vec3(-hx * 7.0, -hy * 7.0, 1.0)), L) - L.z;
 
-        // land colour: the photo's own hue (sand deserts, green forests, white ice), desaturated
-        // and pulled toward cream so it stays in the ink palette
-        vec3 ph = texture2D(photo, vUv).rgb;
-        ph = mix(vec3(dot(ph, vec3(0.299, 0.587, 0.114))), ph, 0.7) * 1.35;
-        vec3 landTone = mix(landDay, ph, 0.55) * (1.0 + shade * 1.6);
-        vec3 landDark = landNight * (1.0 + shade * 1.3);
+        // land stays flat cream ink; relief only shifts its tone a little
+        vec3 landTone = landDay * (1.0 + shade * 0.9);
+        vec3 landDark = landNight * (1.0 + shade * 0.8);
 
         vec3 day = mix(oceanDay, landTone, isLand);
         vec3 dark = mix(oceanNight, landDark, isLand);
@@ -164,9 +160,6 @@ export function createDayNightMaterial() {
 
   const loader = new TextureLoader();
   u.topo.value = loader.load('/textures/earth-topology.png');
-  const photo = loader.load('/textures/earth-day.jpg');
-  photo.colorSpace = SRGBColorSpace;
-  u.photo.value = photo;
 
   return { material, loaded };
 }

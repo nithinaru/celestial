@@ -3,6 +3,7 @@ import { Vector3 } from 'three';
 import type { SkyEvent } from '../data/skyEvents';
 import { angularDistance, darkness, wrapLng, type LatLng } from '../sky/sun';
 import { createArmillary } from './armillary';
+import { createClouds } from './clouds';
 import { createDayNightMaterial } from './dayNightMaterial';
 import { createAuroraCurtain, createFireballMarks } from './marks';
 
@@ -141,6 +142,7 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
 
   const fireballMarks = createFireballMarks(globe);
   const curtain = createAuroraCurtain(globe);
+  const clouds = createClouds(globe);
 
   function issElement(d: object) {
     issDot = document.createElement('div');
@@ -201,6 +203,7 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     armillary.setIntro(phase(ms, INTRO.rings));
     material.uniforms.coastTrace.value = phase(ms, INTRO.coast) * 1.001;
     material.uniforms.fill.value = phase(ms, INTRO.fill);
+    clouds.frame(now / 1000, phase(ms, INTRO.fill));
     const ev = phase(ms, INTRO.events);
     if (ev !== eventsIntro) {
       eventsIntro = ev;
@@ -252,6 +255,7 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       material.uniforms.sunDirection.value.copy(dir);
       armillary.setSun(dir, date);
       curtain.setSun(dir);
+      clouds.setSun(dir);
 
       for (const h of handles) h.lng = wrapLng(sun.lng + SIDE_OFFSET[h.side]);
       refreshHtml();
