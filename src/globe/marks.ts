@@ -181,6 +181,15 @@ export function createFireballMarks(globe: GlobeLike) {
 
   return {
     sprite,
+    /** a slow twinkle: each star breathes on its own phase, so the field never looks frozen */
+    frame(timeSec: number) {
+      for (const e of shown) {
+        const s = sprites.get(e.id);
+        if (!s) continue;
+        const k = sizeOf(e) * (1 + 0.14 * Math.sin(timeSec * 2.1 + (e.lng + e.lat) * 0.7));
+        s.scale.set(k, k, 1);
+      }
+    },
     /** which fireballs are on the globe, and how visible each one is (darkness) */
     setShown(events: SkyEvent[], alpha: (e: SkyEvent) => number) {
       shown = events;

@@ -7,6 +7,8 @@ body {
 }
 
 #globe {
+  --cx: 50%; /* set from the projected Earth centre in createGlobe.ts */
+  --cy: 50%;
   position: fixed;
   inset: 0;
 }
@@ -116,4 +118,67 @@ body {
 }
 .detail-card__details dd {
   margin: 0;
+}
+
+/* the sky behind the globe: a star-chart plate. Concentric rings centred on the Earth,
+   scattered stars, and a soft pool of light so the instrument sits on something. */
+#globe::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-radial-gradient(circle at var(--cx) var(--cy),
+      transparent 0 119px,
+      color-mix(in srgb, var(--ink-type, #f1e6c8) 7%, transparent) 119px 120px),
+    radial-gradient(circle at 13% 21%, color-mix(in srgb, var(--ink-type, #f1e6c8) 70%, transparent) 0 1px, transparent 1.5px) 0 0 / 97px 89px,
+    radial-gradient(circle at 61% 77%, color-mix(in srgb, var(--ink-type, #f1e6c8) 45%, transparent) 0 1px, transparent 1.5px) 0 0 / 157px 131px,
+    radial-gradient(circle at 37% 52%, color-mix(in srgb, var(--ink-type, #f1e6c8) 30%, transparent) 0 0.8px, transparent 1.2px) 0 0 / 61px 53px,
+    radial-gradient(circle at var(--cx) var(--cy),
+      color-mix(in srgb, var(--ink-planet, #5b6fb5) 22%, transparent) 0,
+      transparent 46%);
+  -webkit-mask-image: radial-gradient(circle at var(--cx) var(--cy), #000 30%, transparent 78%);
+  mask-image: radial-gradient(circle at var(--cx) var(--cy), #000 30%, transparent 78%);
+}
+
+/* the ISS is live: a diamond ripple every two seconds */
+.iss-dot::after {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border: 1px solid var(--ink-type, #f1e6c8);
+  animation: iss-ping 2s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+@keyframes iss-ping {
+  from { transform: scale(1); opacity: 0.9; }
+  to { transform: scale(3.2); opacity: 0; }
+}
+
+/* live sources stamp under the wordmark */
+.cel-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font: 500 11px/1 var(--font-ascii, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink-type, #f1e6c8) 75%, transparent);
+}
+.cel-live::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-aurora, #9bd24a);
+  animation: cel-live-blink 1.6s steps(2, jump-none) infinite;
+}
+@keyframes cel-live-blink {
+  50% { opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iss-dot::after,
+  .cel-live::before {
+    animation: none;
+  }
 }

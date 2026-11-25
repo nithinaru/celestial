@@ -191,14 +191,25 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       issOpacity();
     }
     curtain.frame(now / 1000, eventsIntro);
+    fireballMarks.frame(now / 1000);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
 
   const refreshHtml = () => globe.htmlElementsData(issEl ? [issEl, ...handles] : handles);
 
-  const fit = () => globe.width(el.clientWidth).height(el.clientHeight);
+  // centre the star-chart backdrop (style.css #globe::before) on the Earth as actually drawn
+  const centreBackdrop = () => {
+    const c = globe.getScreenCoords(0, 0, -1); // altitude -1 = radius 0 = the Earth's centre
+    el.style.setProperty('--cx', `${c.x}px`);
+    el.style.setProperty('--cy', `${c.y}px`);
+  };
+  const fit = () => {
+    globe.width(el.clientWidth).height(el.clientHeight);
+    requestAnimationFrame(centreBackdrop); // after the armillary view offset has been applied
+  };
   window.addEventListener('resize', fit);
+  window.addEventListener('celestial:view', () => setTimeout(centreBackdrop, 1500));
   fit();
 
   return {

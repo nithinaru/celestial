@@ -54,6 +54,8 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
   // wordmark
   const mark = h('div', 'cel-wordmark');
   mark.append(h('div', 'cel-wordmark__name cel-poster', 'Celestial'));
+  // where every mark on the globe comes from, said plainly
+  mark.append(h('div', 'cel-live', 'Live · NOAA · NASA JPL · CelesTrak'));
 
   // clock + view switch
   const top = h('div', 'cel-top');
