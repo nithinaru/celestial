@@ -38,3 +38,26 @@ body {
 .night-handle:active {
   cursor: grabbing;
 }
+
+/* placeholder layout only; the Paper design restyles this */
+.time-slider {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #c9d2ff;
+  font: 13px/1 system-ui, sans-serif;
+}
+.time-slider input {
+  flex: 1;
+  accent-color: #ff5a36;
+}
+.time-slider output {
+  min-width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

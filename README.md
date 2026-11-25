@@ -15,6 +15,7 @@ npm run dev
 | `src/globe/createGlobe.ts` | globe.gl rendering only, no UI chrome |
 | `src/globe/dayNightMaterial.ts` | globe shader: city lights at night, dimmed day map, glowing night line |
 | `src/sky/sun.ts` | subsolar point from the date, and how dark any spot is |
+| `src/ui/timeSlider.ts` | bare fireball time scrubber |
 | `src/main.ts` | wires data → globe, holds `state` |
 | `api/fireball.ts` | Vercel function proxying JPL (no CORS); `vite.config.ts` mirrors it in dev |
 | `public/fallback/*.json` | snapshots used when a live feed fails, so the demo never breaks |
@@ -41,6 +42,8 @@ window.addEventListener('celestial:sun', (e) => {
 ```
 
 Sun math check: `node src/sky/sun.check.ts`
+
+The time slider (`src/ui/timeSlider.ts`, a plain `<input type="range">`) scrubs from the oldest fireball to now, one day per step. Fireballs that hadn't happened yet disappear. Each move sets `state.fireballTime` and fires `celestial:time` with the time in ms.
 
 ## Data sources
 

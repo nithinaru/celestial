@@ -12,6 +12,8 @@ export interface SkyGlobe {
   onSelect(cb: (event: SkyEvent) => void): void;
   /** User dragged the night line to a new sun position; null = double-clicked to return to real time. */
   onSunDrag(cb: (sun: LatLng | null) => void): void;
+  /** Show fireballs as of this moment (ms): ones that hadn't happened yet are hidden. */
+  setFireballTime(t: number): void;
 }
 
 const FIREBALL_RGB = '255, 90, 54'; // redder than the sodium-orange city lights on the night texture
@@ -38,6 +40,11 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
 
   let sun: LatLng = { lat: 0, lng: 0 };
   const lit = (p: LatLng) => DAY_OPACITY + (1 - DAY_OPACITY) * darkness(p, sun);
+
+  let fireballs: SkyEvent[] = [];
+  let fireballTime = Date.now();
+  const showFireballs = () =>
+    globe.pointsData(fireballs.filter((e) => Date.parse(e.time) <= fireballTime));
 
   const material = createDayNightMaterial();
   const handles: Handle[] = [
@@ -133,7 +140,8 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
 
   return {
     setEvents(events) {
-      globe.pointsData(events.filter((e) => e.type === 'fireball'));
+      fireballs = events.filter((e) => e.type === 'fireball');
+      showFireballs();
       globe.heatmapsData([events.filter((e) => e.type === 'aurora')]);
     },
     setIss(iss, trail) {
@@ -165,6 +173,10 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     },
     onSunDrag(cb) {
       onSunDrag = cb;
+    },
+    setFireballTime(t) {
+      fireballTime = t;
+      showFireballs();
     },
   };
 }

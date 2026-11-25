@@ -2,6 +2,7 @@ import './style.css';
 import { getSkyEvents, watchIss, type SkyEvent } from './data/skyEvents';
 import { createGlobe } from './globe/createGlobe';
 import { subsolarPoint, type LatLng } from './sky/sun';
+import { createTimeSlider } from './ui/timeSlider';
 
 // App state lives here; the Paper design will render UI from it.
 export const state: {
@@ -10,11 +11,14 @@ export const state: {
   sun: LatLng;
   /** true while the user has dragged the night line away from the real sun */
   sunOverridden: boolean;
+  /** time slider position (ms): fireballs after this are hidden */
+  fireballTime: number;
 } = {
   events: [],
   selected: null,
   sun: subsolarPoint(new Date()),
   sunOverridden: false,
+  fireballTime: Date.now(),
 };
 
 const globe = createGlobe(document.querySelector<HTMLDivElement>('#globe')!);
@@ -43,6 +47,15 @@ globe.onSelect((event) => {
 state.events = await getSkyEvents();
 globe.setEvents(state.events);
 watchIss((iss, trail) => globe.setIss(iss, trail));
+
+const fireballTimes = state.events.filter((e) => e.type === 'fireball').map((e) => Date.parse(e.time));
+if (fireballTimes.length) {
+  createTimeSlider(document.body, Math.min(...fireballTimes), (t) => {
+    state.fireballTime = t;
+    globe.setFireballTime(t);
+    window.dispatchEvent(new CustomEvent('celestial:time', { detail: t }));
+  });
+}
 
 const counts = state.events.reduce<Record<string, number>>(
   (acc, e) => ((acc[e.type] = (acc[e.type] ?? 0) + 1), acc),
