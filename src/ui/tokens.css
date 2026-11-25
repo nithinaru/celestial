@@ -52,8 +52,21 @@
   --space-5: 40px;
   --space-6: 64px;
 
+  /* motion: one small vocabulary, shared by the chrome and the globe's markers */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* entering, leaving, responding */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* big moves across the sheet */
+  --ease-light: cubic-bezier(0.45, 0.05, 0.25, 1); /* light changing: no lurch, no snap */
+  /* a damped spring (~5% overshoot, settles by ~75%): alive, not wobbly */
+  --spring: linear(0, 0.06 4%, 0.199 8%, 0.369 12%, 0.538 15%, 0.689 19%, 0.812 23%, 0.905 27%, 0.97 31%, 1.012 35%, 1.035 38%, 1.046 44%, 1.034 54%, 1.018 62%, 1.007 69%, 1 77%, 1);
+  /* looser spring, only for things you grab */
+  --spring-bouncy: linear(0, 0.72 12.9%, 1.12 21%, 1.16 27%, 1.02 43%, 0.975 54%, 1);
+  --dur-press: 140ms; /* press feedback */
+  --dur-quick: 200ms; /* hints, colour flips, small reveals */
+  --dur-base: 320ms; /* toggles and hover responses */
+  --dur-spring: 450ms; /* spring travel, incl. its invisible settle tail */
+
   /* ink changes are a slow cross-fade, like light changing, never a snap */
-  --phase-fade: 1200ms ease;
+  --phase-fade: 1200ms var(--ease-light);
 }
 
 html,
@@ -84,6 +97,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --phase-fade: 0ms;
+    --phase-fade: 400ms ease; /* a colour fade is not motion: keep it, just shorter */
   }
 }

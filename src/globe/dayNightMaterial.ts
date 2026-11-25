@@ -26,6 +26,17 @@ function canvas(): [HTMLCanvasElement, CanvasRenderingContext2D] {
   return [c, c.getContext('2d', { willReadFrequently: true })!];
 }
 
+/** Ease a value in over `ms` (cubic ease-out) so a texture landing reads as a reveal, not a pop. */
+function rampIn(ms: number, apply: (t: number) => void) {
+  const t0 = performance.now();
+  const frame = (now: number) => {
+    const p = Math.min((now - t0) / ms, 1);
+    apply(1 - (1 - p) ** 3);
+    if (p < 1) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
 export function createDayNightMaterial() {
   const material = new MeshStandardMaterial({
     color: new Color('#3a2f27'),
@@ -82,13 +93,18 @@ export function createDayNightMaterial() {
       if (srgb) t.colorSpace = SRGBColorSpace;
       return t;
     };
-    material.color.set('#ffffff');
+    const from = material.color.clone();
+    const white = new Color('#ffffff');
     material.map = tex(colC, true);
     material.roughnessMap = tex(roughC);
     material.roughness = 1;
     material.bumpMap = tex(bumpC);
-    material.bumpScale = 2.2;
     material.needsUpdate = true;
+    // brighten the metal and raise the relief from the placeholder instead of swapping in one frame
+    rampIn(700, (t) => {
+      material.color.copy(from).lerp(white, t);
+      material.bumpScale = 2.2 * t;
+    });
     void src;
   };
   img.src = '/textures/earth-day.jpg';
@@ -101,8 +117,8 @@ export function createDayNightMaterial() {
     const t = new CanvasTexture(c);
     t.colorSpace = SRGBColorSpace;
     material.emissiveMap = t;
-    material.emissiveIntensity = 0.9;
     material.needsUpdate = true;
+    rampIn(900, (k) => (material.emissiveIntensity = 0.9 * k)); // cities come on, not switch on
   };
   lights.src = '/textures/earth-night.jpg';
 

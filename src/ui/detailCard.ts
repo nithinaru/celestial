@@ -47,15 +47,53 @@ export function createDetailCard(parent: HTMLElement, onClose: () => void) {
   };
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !root.hidden) onClose();
+    if (e.key === 'Escape' && !root.hidden && !closing) onClose();
   });
+
+  // Motion: enter from slightly below, swap content with a quick settle, exit faster than it came.
+  // Every call cancels the one before, so rapid selections never stack or snap.
+  const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let anim: Animation | null = null;
+  let closing = false;
+  let shownId: string | null = null;
+  const play = (dy: number, from: number, to: number, duration: number) => {
+    anim?.cancel();
+    const move = !reduced.matches && dy !== 0;
+    anim = root.animate(
+      [
+        { opacity: from, transform: move && from < to ? `translateY(${dy}px)` : 'none' },
+        { opacity: to, transform: move && from > to ? `translateY(${dy}px)` : 'none' },
+      ],
+      { duration, easing: EASE_OUT, fill: to === 0 ? 'forwards' : 'none' },
+    );
+    return anim;
+  };
 
   return {
     show(event: SkyEvent | null) {
+      if (!event) {
+        shownId = null;
+        if (root.hidden || closing) return;
+        closing = true;
+        const out = play(-4, 1, 0, 150);
+        out.onfinish = () => {
+          closing = false;
+          root.hidden = true;
+          root.replaceChildren();
+          out.cancel();
+        };
+        out.oncancel = () => (closing = false);
+        return;
+      }
+      if (event.id === shownId && !root.hidden && !closing) return; // same event: leave it be
+      const wasOpen = !root.hidden && !closing;
+      shownId = event.id;
       root.replaceChildren();
-      root.hidden = !event;
-      if (!event) return;
+      root.hidden = false;
       root.dataset.type = event.type;
+      if (wasOpen) play(4, 0, 1, 180);
+      else play(8, 0, 1, 220);
 
       const close = el('button', 'detail-card__close', '×');
       close.setAttribute('aria-label', 'Close');

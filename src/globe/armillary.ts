@@ -12,6 +12,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   PMREMGenerator,
+  Quaternion,
   TorusGeometry,
   Vector3,
   type Light,
@@ -27,6 +28,7 @@ interface GlobeLike {
   scene(): Scene;
   camera(): unknown;
   renderer(): unknown;
+  controls(): unknown;
   lights(lights: Light[]): unknown;
   getGlobeRadius(): number;
   getCoords(lat: number, lng: number, altitude?: number): { x: number; y: number; z: number };
@@ -122,29 +124,96 @@ export function createArmillary(globe: GlobeLike) {
     attributeFilter: ['data-phase'],
   });
 
-  // ---- views ----
-  let view: View = 'armillary';
-  let shift = 0; // 0 = whole instrument, 1 = standing at the limb
-  const cam = globe.camera() as PerspectiveCamera;
+  // ---- motion ----
+  // Everything below moves on one rAF loop that runs only while something is settling.
+  // Critically damped smoothing (Unity's SmoothDamp): frame-rate independent, never overshoots,
+  // and a retarget mid-flight keeps the current velocity instead of restarting or jumping.
+  type Spring = { x: number; v: number; to: number };
+  const damp = (s: Spring, smoothTime: number, dt: number) => {
+    const omega = 2 / smoothTime;
+    const k = omega * dt;
+    const e = 1 / (1 + k + 0.48 * k * k + 0.235 * k * k * k);
+    const change = s.x - s.to;
+    const temp = (s.v + omega * change) * dt;
+    s.v = (s.v - omega * temp) * e;
+    const next = s.to + (change + temp) * e;
+    s.x = change > 0 === next > s.to ? next : s.to; // clamp overshoot
+    if (Math.abs(s.x - s.to) < 1e-4 && Math.abs(s.v) < 1e-3) {
+      s.x = s.to;
+      s.v = 0;
+      return false;
+    }
+    return true;
+  };
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-  const tick = () => {
-    shift += ((view === 'horizon' ? 1 : 0) - shift) * 0.07;
+  // ---- views ----
+  const cam = globe.camera() as PerspectiveCamera;
+  const shift: Spring = { x: 0, v: 0, to: 0 }; // 0 = whole instrument, 1 = standing at the limb
+  // camera altitude, damped in log space so the zoom feels even from far to near
+  const zoom: Spring = { x: 0, v: 0, to: 0 };
+  let flying = false;
+  // the user grabbing the globe takes the camera back; only the view slide finishes
+  (globe.controls() as { addEventListener(type: string, fn: () => void): void }).addEventListener(
+    'start',
+    () => {
+      flying = false;
+      zoom.v = 0;
+    },
+  );
+
+  // the sun direction eases along the great circle, so a jump in time sweeps instead of snapping
+  const sunQ = new Quaternion();
+  const sunTo = new Quaternion();
+  let sunSet = false;
+
+  const layout = () => {
+    const s = shift.x;
     const w = window.innerWidth;
     const h = window.innerHeight;
     // armillary: the instrument sits right of centre, leaving the left for the counter.
     // horizon: slide the picture down so only the top arc of the Earth stays in frame.
-    const dx = w > 1100 ? -w * 0.09 * (1 - shift) : 0;
-    cam.setViewOffset(w, h, dx, -h * (0.03 + 0.66 * shift), w, h);
-    rings.scale.setScalar(Math.max(1 - shift, 0.001));
-    rings.visible = shift < 0.97;
-    requestAnimationFrame(tick);
+    const dx = w > 1100 ? -w * 0.09 * (1 - s) : 0;
+    cam.setViewOffset(w, h, dx, -h * (0.03 + 0.74 * s), w, h);
+    rings.scale.setScalar(Math.max(1 - s, 0.001));
+    rings.visible = s < 0.97;
+    if (sunSet) {
+      night.quaternion.copy(sunQ);
+      sunLight.position.copy(Z).applyQuaternion(sunQ).multiplyScalar(R * 10);
+    }
   };
-  requestAnimationFrame(tick);
+
+  let raf = 0;
+  let last = 0;
+  const step = (now: number) => {
+    const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
+    last = now;
+    let moving = damp(shift, 0.3, dt);
+    if (flying) {
+      flying = damp(zoom, 0.35, dt);
+      globe.pointOfView({ altitude: Math.exp(zoom.x) });
+      moving = moving || flying;
+    }
+    if (sunQ.angleTo(sunTo) > 1e-4) {
+      sunQ.slerp(sunTo, 1 - Math.exp(-dt / 0.07));
+      moving = true;
+    } else sunQ.copy(sunTo);
+    layout();
+    raf = moving ? requestAnimationFrame(step) : 0;
+    if (!moving) last = 0;
+  };
+  const kick = () => {
+    if (!raf) raf = requestAnimationFrame(step);
+  };
+  window.addEventListener('resize', kick); // re-apply the view offset at the new size
+  kick();
 
   return {
     setSun(dir: Vector3) {
-      night.quaternion.setFromUnitVectors(Z, dir);
-      sunLight.position.copy(dir).multiplyScalar(R * 10);
+      sunTo.setFromUnitVectors(Z, dir);
+      if (!sunSet || reducedMotion.matches) sunQ.copy(sunTo);
+      sunSet = true;
+      kick();
     },
     setOrbit(trail: LatLng[]) {
       if (trail.length < 2) return;
@@ -156,8 +225,24 @@ export function createArmillary(globe: GlobeLike) {
       orbit.visible = true;
     },
     setView(next: View) {
-      view = next;
-      globe.pointOfView({ altitude: next === 'horizon' ? 0.75 : 2.9 }, 1400);
+      const altitude = next === 'horizon' ? 1.15 : 2.9;
+      shift.to = next === 'horizon' ? 1 : 0;
+      if (reducedMotion.matches) {
+        // cut straight to the destination
+        flying = false;
+        shift.x = shift.to;
+        shift.v = zoom.v = 0;
+        globe.pointOfView({ altitude });
+      } else {
+        // fresh flight: start from wherever the user left the camera; mid-flight: keep velocity
+        if (!flying) {
+          zoom.x = Math.log((globe.pointOfView({}) as { altitude: number }).altitude);
+          zoom.v = 0;
+        }
+        zoom.to = Math.log(altitude);
+        flying = true;
+      }
+      kick();
     },
   };
 }

@@ -2,8 +2,10 @@ import Globe from 'globe.gl';
 import { Vector3 } from 'three';
 import type { SkyEvent } from '../data/skyEvents';
 import { angularDistance, darkness, wrapLng, type LatLng } from '../sky/sun';
+import { createTapestry } from '../ui/tapestry';
 import { createArmillary } from './armillary';
 import { createDayNightMaterial } from './dayNightMaterial';
+import { markElement, setAuroraMark, setSelectedMark, skyMarks, type SkyMark } from './skyMarks';
 
 export interface SkyGlobe {
   setEvents(events: SkyEvent[]): void;
@@ -79,7 +81,7 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     .pointLat('lat')
     .pointLng('lng')
     .pointAltitude(0.01)
-    .pointRadius((d) => 0.35 + Math.log10(1 + (d as SkyEvent).intensity) * 0.6)
+    .pointRadius((d) => 0.75 + Math.log10(1 + (d as SkyEvent).intensity) * 0.75)
     .pointColor((d) => `rgba(${FIREBALL_RGB}, ${lit(d as SkyEvent)})`)
     .pointLabel((d) => (d as SkyEvent).label)
     .onPointClick((d) => selectCb(d))
@@ -103,13 +105,21 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       // two printed layers of poster green instead of a soft glow
       t > 0.42 ? 'rgba(155, 210, 74, 1)' : t > 0.16 ? 'rgba(155, 210, 74, 0.55)' : 'rgba(155, 210, 74, 0)',
     )
-    .heatmapsTransitionDuration(0)
+    // blend each recompute in (and fade the first one up) instead of popping; a recompute that
+    // lands mid-blend starts from the current values, so it retargets rather than jumps
+    .heatmapsTransitionDuration(300)
     // ISS dot + night-line handles share the html layer
     .htmlLat('lat')
     .htmlLng('lng')
-    .htmlAltitude((d) => ((d as Handle).kind === 'handle' ? 0.01 : 0.06))
+    .htmlAltitude((d) => ((d as Handle).kind === 'handle' ? 0.01 : (d as SkyMark).kind === 'mark' ? 0.025 : 0.06))
     .htmlTransitionDuration(0)
-    .htmlElement((d) => ((d as Handle).kind === 'handle' ? handleEl(d as Handle) : issElement(d)))
+    .htmlElement((d) =>
+      (d as Handle).kind === 'handle'
+        ? handleEl(d as Handle)
+        : (d as SkyMark).kind === 'mark'
+          ? markElement(d as SkyMark)
+          : issElement(d),
+    )
     // ISS trail
     .pathPoints((d) => d as LatLng[])
     .pathPointLat('lat')
@@ -125,6 +135,7 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
   function issElement(d: object) {
     issDot = document.createElement('div');
     issDot.className = 'iss-dot';
+    issDot.append(createTapestry('iss', { cell: 0.8 }).el); // the station, drawn in characters
     issDot.title = (d as SkyEvent).label;
     issDot.onclick = () => selectCb(d);
     // the globe counts a click from pointerdown on its container; don't let it also see an empty-globe click
@@ -163,7 +174,12 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     armillary.setView((e as CustomEvent<'armillary' | 'horizon'>).detail),
   );
 
-  const refreshHtml = () => globe.htmlElementsData(issEl ? [issEl, ...handles] : handles);
+  const refreshHtml = () =>
+    globe.htmlElementsData([...(issEl ? [issEl] : []), ...handles, ...skyMarks()]);
+  // a selected fireball gets its ASCII streak on the globe
+  window.addEventListener('celestial:select', (e) => {
+    if (setSelectedMark((e as CustomEvent<SkyEvent | null>).detail)) refreshHtml();
+  });
 
   const fit = () => globe.width(el.clientWidth).height(el.clientHeight);
   window.addEventListener('resize', fit);
@@ -175,6 +191,8 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       showFireballs();
       aurora = events.filter((e) => e.type === 'aurora');
       globe.heatmapsData([aurora]);
+      setAuroraMark(aurora);
+      refreshHtml();
     },
     setIss(iss, trail) {
       // keep one object so globe.gl reuses the html element instead of rebuilding it each second

@@ -12,6 +12,16 @@ const RISE = 6 * 60 + 40;
 const SET = 17 * 60 + 20;
 const LIMIT = 720; // minutes either side of now
 
+// Motion rates, per second, so the feel is the same at 60Hz and 120Hz. Each k matches the
+// old per-frame factor at 60fps: k = -ln(1 - factor) * 60.
+const K_SHOWN = 15; // band spring after a jump (was 0.22/frame)
+const K_HOVER = 9; // pointer presence (was 0.14/frame)
+const K_HX = 17; // pointer follow (was 0.25/frame)
+const K_PRESS = 13.4; // held state (was 0.2/frame)
+const FRICTION = 4.35; // glide decay (was x0.93/frame)
+const GLIDE_STOP = 0.6; // min/s below which the glide ends
+const approach = (k: number, dt: number) => 1 - Math.exp(-k * dt);
+
 export type Phase = 'night' | 'dawn' | 'day' | 'dusk';
 
 const localMinutes = (t: number) => {
@@ -58,13 +68,20 @@ export function createScrubber(onChange: (when: Date, offsetMin: number) => void
   root.append(canvas, time);
   const ctx = canvas.getContext('2d')!;
 
-  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let still = motion.matches;
+  motion.addEventListener('change', (e) => {
+    still = e.matches;
+    kick();
+  });
 
   let target = 0; // where the user has put it (minutes from now)
   let shown = 0; // where the band is drawn; chases target on a spring
-  let vel = 0; // minutes per frame, for the glide after release
+  let vel = 0; // minutes per second, for the glide after release
   let dragX: number | null = null;
+  let dragId: number | null = null;
   let lastX = 0;
+  let lastMoveT = 0; // event timestamp of the last drag move, ms
   let hoverX: number | null = null; // pointer x in CSS px, or null
   let hover = 0; // 0..1, eased presence of the pointer
   let hx = 0; // eased pointer x
@@ -89,17 +106,57 @@ export function createScrubber(onChange: (when: Date, offsetMin: number) => void
     onChange(new Date(Date.now() + target * 60_000), rounded);
   };
 
-  const frame = () => {
-    // glide after release, then spring the drawn band toward the target
-    if (dragX == null && Math.abs(vel) > 0.01) {
-      target = Math.max(-LIMIT, Math.min(LIMIT, target + vel));
-      vel *= 0.93;
+  // The loop only runs while something is moving; at rest it redraws once a second so the
+  // band and the label keep pace with the real clock.
+  let raf = 0;
+  let idle = 0;
+  let lastT = 0;
+  const kick = () => {
+    if (idle) {
+      clearTimeout(idle);
+      idle = 0;
+    }
+    if (!raf) {
+      lastT = 0;
+      raf = requestAnimationFrame(frame);
+    }
+  };
+
+  const frame = (t: number) => {
+    raf = 0;
+    // seconds since the last frame, clamped so a backgrounded tab does not lurch on return
+    const dt = lastT ? Math.min((t - lastT) / 1000, 0.064) : 1 / 60;
+    lastT = t;
+
+    // glide after release: friction decays velocity exponentially, independent of frame rate
+    if (dragX == null && vel !== 0) {
+      const next = target + vel * dt;
+      target = Math.max(-LIMIT, Math.min(LIMIT, next));
+      vel = target !== next || Math.abs(vel) < GLIDE_STOP ? 0 : vel * Math.exp(-FRICTION * dt);
       emit();
     }
-    shown += (target - shown) * (still ? 1 : 0.22);
-    hover += ((hoverX == null ? 0 : 1) - hover) * 0.14;
-    if (hoverX != null) hx += (hoverX - hx) * 0.25;
-    press += ((dragX == null ? 0 : 1) - press) * 0.2;
+    // the hand moves the band 1:1 while dragging or gliding; the spring is for jumps (keys, reset)
+    if (still || dragX != null || vel !== 0) shown = target;
+    else shown += (target - shown) * approach(K_SHOWN, dt);
+    const hoverGoal = hoverX == null ? 0 : 1;
+    const pressGoal = dragX == null ? 0 : 1;
+    hover += (hoverGoal - hover) * (still ? 1 : approach(K_HOVER, dt));
+    if (hoverX != null) hx += (hoverX - hx) * (still ? 1 : approach(K_HX, dt));
+    press += (pressGoal - press) * (still ? 1 : approach(K_PRESS, dt));
+
+    const settled =
+      dragX == null &&
+      vel === 0 &&
+      Math.abs(target - shown) < 0.01 &&
+      Math.abs(hoverGoal - hover) < 0.002 &&
+      Math.abs(pressGoal - press) < 0.002 &&
+      (hoverX == null || Math.abs(hoverX - hx) < 0.1);
+    if (settled) {
+      shown = target;
+      hover = hoverGoal;
+      press = pressGoal;
+      if (hoverX != null) hx = hoverX;
+    }
 
     const css = getComputedStyle(root);
     const type = css.getPropertyValue('--ink-type').trim();
@@ -145,51 +202,91 @@ export function createScrubber(onChange: (when: Date, offsetMin: number) => void
       document.documentElement.dataset.phase = phase;
       root.setAttribute('aria-valuetext', `${label}, ${phase}`);
     }
-    requestAnimationFrame(frame);
+    if (settled) idle = window.setTimeout(kick, 1000);
+    else raf = requestAnimationFrame(frame);
   };
 
   const set = (next: number) => {
     target = Math.max(-LIMIT, Math.min(LIMIT, next));
     emit();
+    kick();
   };
 
   root.addEventListener('pointerdown', (e) => {
+    if (!e.isPrimary || e.button !== 0) return;
     dragX = lastX = e.clientX;
+    dragId = e.pointerId;
+    lastMoveT = e.timeStamp;
+    // catch the band where it is drawn, so grabbing mid-glide or mid-spring holds it in place
     vel = 0;
+    set(shown);
     root.setPointerCapture(e.pointerId);
     root.classList.add('is-dragging');
   });
   root.addEventListener('pointermove', (e) => {
-    hoverX = e.clientX - root.getBoundingClientRect().left;
-    if (dragX == null) return;
+    const x = e.clientX - root.getBoundingClientRect().left;
+    if (hoverX == null && hover < 0.01) hx = x; // swell appears under the pointer, not slides in
+    hoverX = x;
+    kick();
+    if (dragX == null || e.pointerId !== dragId) return;
     // drag the band, not the marker: pulling right brings earlier time under the line
     const dMin = -((e.clientX - lastX) / GAP) * STEP_MIN;
     lastX = e.clientX;
-    vel = vel * 0.6 + dMin * 0.4;
+    // velocity in minutes/second, smoothed over ~50ms so it does not depend on the event rate
+    const dtE = Math.max(e.timeStamp - lastMoveT, 1);
+    lastMoveT = e.timeStamp;
+    const a = 1 - Math.exp(-dtE / 50);
+    vel = vel * (1 - a) + ((dMin * 1000) / dtE) * a;
     set(target + dMin);
   });
-  const end = () => {
-    dragX = null;
+  const end = (e: PointerEvent) => {
+    if (e.pointerId !== dragId) return;
+    // glide only on a real flick: no glide if the hand paused before letting go, if the
+    // gesture was cancelled, or if the user prefers reduced motion
+    const paused = e.timeStamp - lastMoveT > 80;
+    if (still || paused || e.type !== 'pointerup' || Math.abs(vel) < GLIDE_STOP) vel = 0;
+    dragX = dragId = null;
+    if (root.hasPointerCapture(e.pointerId)) root.releasePointerCapture(e.pointerId);
     root.classList.remove('is-dragging');
+    kick();
   };
   root.addEventListener('pointerup', end);
   root.addEventListener('pointercancel', end);
-  root.addEventListener('pointerleave', () => (hoverX = null));
+  root.addEventListener('lostpointercapture', end);
+  root.addEventListener('pointerleave', () => {
+    hoverX = null;
+    kick();
+  });
   root.addEventListener('dblclick', () => {
     vel = 0;
     set(0);
   });
   root.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') set(target + (e.shiftKey ? 60 : 10));
-    else if (e.key === 'ArrowLeft') set(target - (e.shiftKey ? 60 : 10));
-    else if (e.key === 'Home' || e.key === 'Escape') set(0);
+    const step = e.shiftKey ? 60 : 10;
+    let next: number;
+    if (e.key === 'ArrowRight') next = target + step;
+    else if (e.key === 'ArrowLeft') next = target - step;
+    else if (e.key === 'Home' || e.key === 'Escape') next = 0;
+    else return;
+    vel = 0; // a key press stops any glide in progress
+    set(next);
   });
 
-  new ResizeObserver(resize).observe(root);
+  new ResizeObserver(() => {
+    resize();
+    kick(); // resizing clears the canvas, so draw again
+  }).observe(root);
   queueMicrotask(() => {
     resize();
-    requestAnimationFrame(frame);
+    kick();
   });
 
-  return { el: root, offsetMinutes: () => Math.round(target), reset: () => set(0) };
+  return {
+    el: root,
+    offsetMinutes: () => Math.round(target),
+    reset: () => {
+      vel = 0;
+      set(0);
+    },
+  };
 }
