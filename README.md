@@ -15,20 +15,26 @@ npm run dev
 | `src/globe/createGlobe.ts` | globe.gl rendering only, no UI chrome |
 | `src/globe/dayNightMaterial.ts` | globe shader: city lights at night, dimmed day map, glowing night line |
 | `src/sky/sun.ts` | subsolar point from the date, and how dark any spot is |
+| `src/ui/timeSlider.ts` | bare fireball time scrubber |
+| `src/ui/detailCard.ts` | bare event detail card |
 | `src/main.ts` | wires data → globe, holds `state` |
-| `api/fireball.ts` | Vercel function proxying JPL (no CORS); `vite.config.ts` mirrors it in dev |
+| `api/fireball.ts` | Vercel function proxying JPL (no CORS), CDN-cached 1 h |
+| `api/iss.ts` | Vercel function proxying CelesTrak, CDN-cached 2 h (CelesTrak blocks repeat downloads with 403) |
+| `server/proxyJson.ts` | shared proxy helper; failures return 502 uncached so the client uses its fallback |
 | `public/fallback/*.json` | snapshots used when a live feed fails, so the demo never breaks |
 
 ## Hooking up UI
 
-Clicking an event sets `state.selected` and fires a window event:
+Clicking an event sets `state.selected`, opens the bare card in `src/ui/detailCard.ts`, and fires a window event. Clicking empty globe, the card's ×, or Escape sends `null`:
 
 ```ts
 window.addEventListener('celestial:select', (e) => {
-  const event = (e as CustomEvent<SkyEvent>).detail;
-  // { id, type: 'aurora' | 'fireball' | 'iss', lat, lng, time, intensity, label, details }
+  const event = (e as CustomEvent<SkyEvent | null>).detail;
+  // { id, type: 'aurora' | 'fireball' | 'iss', lat, lng, time, intensity, label, details } or null
 });
 ```
+
+The aurora heatmap can't be hit-tested per point, so a click picks the nearest aurora cell within 3° that is currently dark. The card renders with `textContent` only, since every value comes from an outside feed. Restyle it via `.detail-card`, `[data-type]` and the `detail-card__*` classes, or hide it and render your own from the event.
 
 `intensity` means: aurora = probability (0–100), fireball = impact energy (kt), ISS = altitude (km).
 
@@ -42,8 +48,12 @@ window.addEventListener('celestial:sun', (e) => {
 
 Sun math check: `node src/sky/sun.check.ts`
 
+The time slider (`src/ui/timeSlider.ts`, a plain `<input type="range">`) scrubs from the oldest fireball to now, one day per step. Fireballs that hadn't happened yet disappear. Each move sets `state.fireballTime` and fires `celestial:time` with the time in ms.
+
 ## Data sources
 
 - Aurora: NOAA SWPC OVATION (points with probability ≥ 10, strongest per 2° cell)
 - Fireballs: NASA JPL CNEOS fireball API, latest 200
-- ISS: CelesTrak orbital elements, propagated in the browser with satellite.js
+- ISS: CelesTrak orbital elements (via `/api/iss`), propagated in the browser with satellite.js
+
+`vite.config.ts` mirrors both `/api` routes in dev.

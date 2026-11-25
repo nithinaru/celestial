@@ -11,11 +11,14 @@ export const state: {
   sun: LatLng;
   /** true while the user has dragged the night line away from the real sun */
   sunOverridden: boolean;
+  /** time slider position (ms): fireballs after this are hidden */
+  fireballTime: number;
 } = {
   events: [],
   selected: null,
   sun: subsolarPoint(new Date()),
   sunOverridden: false,
+  fireballTime: Date.now(),
 };
 
 const ui = mountUI();
@@ -35,11 +38,18 @@ setInterval(() => {
 }, 60_000);
 globe.onSunDrag((sun) => (sun ? setSun(sun, true) : setSun(subsolarPoint(new Date()), false)));
 
-// Detail cards (step 4) listen for this; for now it only updates state.
-globe.onSelect((event) => {
+// One path for every selection change: globe clicks, the card's ×, Escape, clicking empty globe.
+// The poster card (ui/eventCard.ts) opens and closes on this event.
+const select = (event: SkyEvent | null) => {
   state.selected = event;
   window.dispatchEvent(new CustomEvent('celestial:select', { detail: event }));
-  console.log('[celestial] selected', event);
+};
+globe.onSelect(select);
+
+// Dragging the day scrubber moves the sun, so the night line sweeps across the Earth.
+window.addEventListener('celestial:daytime', (e) => {
+  const { when, offsetMinutes } = (e as CustomEvent<{ when: Date; offsetMinutes: number }>).detail;
+  setSun(subsolarPoint(when), offsetMinutes !== 0);
 });
 
 state.events = await getSkyEvents();

@@ -31,10 +31,8 @@ const FEEDS = {
   },
   // JPL sends no CORS header, so the browser goes through our proxy (vite.config.ts in dev, api/fireball.ts on Vercel).
   fireball: { live: '/api/fireball?limit=200', fallback: '/fallback/fireball.json' },
-  iss: {
-    live: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json',
-    fallback: '/fallback/iss.json',
-  },
+  // CelesTrak rate-limits per address, so go through our cached proxy (api/iss.ts).
+  iss: { live: '/api/iss', fallback: '/fallback/iss.json' },
 } as const;
 
 const AURORA_MIN_PROBABILITY = 10;
@@ -156,7 +154,7 @@ export function issEventAt(satrec: SatRec, date: Date): SkyEvent | null {
 async function loadIss(): Promise<SatRec> {
   const stations = await fetchFeed<OMMJsonObject[]>('iss');
   const iss = stations.find((s) => Number((s as { NORAD_CAT_ID?: number }).NORAD_CAT_ID) === ISS_NORAD_ID);
-  if (!iss) throw new Error('ISS not in stations feed');
+  if (!iss) throw new Error('ISS not in CelesTrak response');
   return json2satrec(iss);
 }
 

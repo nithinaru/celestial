@@ -45,7 +45,7 @@ export interface CelestialUI {
  * Listens for the app's own events:
  *   celestial:select  (detail: SkyEvent | null)  -> opens / closes the card
  * Emits:
- *   celestial:time    (detail: { when: Date, offsetMinutes: number })  when the scrubber moves
+ *   celestial:daytime (detail: { when: Date, offsetMinutes: number })  when the scrubber moves
  *   celestial:view    (detail: 'armillary' | 'horizon')                when the view switch is used
  */
 export function mountUI(parent: HTMLElement = document.body): CelestialUI {
@@ -53,7 +53,7 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
 
   // wordmark
   const mark = h('div', 'cel-wordmark');
-  mark.append(h('div', 'cel-wordmark__name cel-poster', 'Celestial'), h('div', 'cel-wordmark__sub cel-poster', 'Rare sky, live'));
+  mark.append(h('div', 'cel-wordmark__name cel-poster', 'Celestial'));
 
   // clock + view switch
   const top = h('div', 'cel-top');
@@ -65,12 +65,16 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
   tick();
   window.setInterval(tick, 10_000);
   const views = h('div', 'cel-views cel-poster');
+  views.dataset.view = 'armillary';
+  views.append(h('span', 'cel-views__pill'));
   for (const v of ['armillary', 'horizon'] as const) {
     const b = h('button', 'cel-views__btn', v);
     b.type = 'button';
     b.setAttribute('aria-pressed', String(v === 'armillary'));
     b.addEventListener('click', () => {
       views.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      views.dataset.view = v;
+      root.dataset.view = v;
       window.dispatchEvent(new CustomEvent('celestial:view', { detail: v }));
     });
     views.append(b);
@@ -81,12 +85,11 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
   const counter = h('div', 'cel-counter');
   const big = h('div', 'cel-counter__n cel-dot', '0');
   const words = h('div', 'cel-counter__words cel-poster', 'regions can see the aurora right now');
-  const also = h('div', 'cel-counter__also cel-poster');
-  counter.append(big, words, also);
+  counter.append(big, words);
 
   const cardSlot = h('div', 'cel-card-slot');
   const scrubber = createScrubber((when, offsetMinutes) =>
-    window.dispatchEvent(new CustomEvent('celestial:time', { detail: { when, offsetMinutes } })),
+    window.dispatchEvent(new CustomEvent('celestial:daytime', { detail: { when, offsetMinutes } })),
   );
 
   root.append(mark, top, counter, legend(), cardSlot, scrubber.el, h('div', 'cel-grain'));
@@ -104,7 +107,6 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
   return {
     select,
     setEvents(events) {
-      const n = (t: SkyEvent['type']) => events.filter((e) => e.type === t).length;
       // The feed is a grid of sky cells, not towns. Count regions honestly: a 30° slice of
       // longitude in either hemisphere counts once if any cell in it has at least a 1 in 5 chance.
       const regions = new Set(
@@ -115,8 +117,6 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
       const aurora = regions.size;
       big.textContent = String(aurora);
       words.textContent = `${aurora === 1 ? 'region can' : 'regions can'} see the aurora right now`;
-      const fb = n('fireball');
-      also.textContent = `${fb} ${fb === 1 ? 'fireball' : 'fireballs'} on record · ISS overhead somewhere`;
     },
   };
 }

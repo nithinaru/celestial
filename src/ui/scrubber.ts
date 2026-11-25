@@ -1,31 +1,38 @@
-// The day scrubber: a band of sun rays you drag. One line = 10 minutes.
-// A line's height is how high the Sun is at that moment in your own sky, so noon is tall
-// and night is a row of stubs. The chosen moment is always the line under the fixed marker.
+// The day scrubber: nothing but lines. One line is 10 minutes; its height is how high the
+// Sun is at that moment, so the band itself shows day and night without a single label.
+// The only text is the time under the fixed centre line.
+//
+// It should feel like running a finger through reeds: lines swell toward the pointer,
+// the band keeps gliding after you let go, and everything settles on springs.
 
-const NS = 'http://www.w3.org/2000/svg';
 const STEP_MIN = 10;
-const PX_PER_STEP = 8;
-const H = 96; // band height
-const BASE = 78; // baseline y
+const GAP = 7; // px between lines
+const H = 84; // band height in CSS px
 const RISE = 6 * 60 + 40;
 const SET = 17 * 60 + 20;
+const LIMIT = 720; // minutes either side of now
 
 export type Phase = 'night' | 'dawn' | 'day' | 'dusk';
 
-const localMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes();
+const localMinutes = (t: number) => {
+  const d = new Date(t);
+  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+};
 
 /** Which set of inks the app wears. Dawn and dusk are the 80 minutes around sunrise and sunset. */
 export function phaseAt(d: Date): Phase {
-  const m = localMinutes(d);
+  const m = localMinutes(d.getTime());
   if (Math.abs(m - RISE) <= 40) return 'dawn';
   if (Math.abs(m - SET) <= 40) return 'dusk';
   return m > RISE && m < SET ? 'day' : 'night';
 }
 
-function sunHeight(d: Date, max: number): { h: number; up: boolean } {
-  const m = localMinutes(d);
-  if (m >= RISE && m <= SET) return { h: 14 + (max - 14) * Math.sin((Math.PI * (m - RISE)) / (SET - RISE)), up: true };
-  return { h: Math.abs(m - RISE) <= 40 || Math.abs(m - SET) <= 40 ? 13 : 9, up: false };
+/** 0..1: the Sun's height at local time t, with a soft shoulder at sunrise and sunset. */
+function sun(t: number): number {
+  const m = localMinutes(t);
+  if (m <= RISE - 30 || m >= SET + 30) return 0;
+  const x = Math.sin((Math.PI * (m - RISE + 30)) / (SET - RISE + 60));
+  return Math.max(0, x);
 }
 
 const two = (n: number) => String(n).padStart(2, '0');
@@ -44,89 +51,122 @@ export function createScrubber(onChange: (when: Date, offsetMin: number) => void
   root.setAttribute('aria-label', 'Time of day');
   root.tabIndex = 0;
 
-  const readout = document.createElement('div');
-  readout.className = 'cel-scrubber__readout';
-  const phaseEl = document.createElement('div');
-  phaseEl.className = 'cel-scrubber__phase cel-poster';
-  const timeEl = document.createElement('div');
-  timeEl.className = 'cel-scrubber__time cel-dot';
-  const deltaEl = document.createElement('div');
-  deltaEl.className = 'cel-scrubber__delta cel-dot';
-  readout.append(phaseEl, timeEl, deltaEl);
+  const canvas = document.createElement('canvas');
+  canvas.className = 'cel-scrubber__band';
+  const time = document.createElement('div');
+  time.className = 'cel-scrubber__time cel-dot';
+  root.append(canvas, time);
+  const ctx = canvas.getContext('2d')!;
 
-  const svg = document.createElementNS(NS, 'svg');
-  svg.classList.add('cel-scrubber__band');
-  svg.setAttribute('height', String(H + 22));
-  root.append(readout, svg);
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  let offset = 0; // minutes from now
+  let target = 0; // where the user has put it (minutes from now)
+  let shown = 0; // where the band is drawn; chases target on a spring
+  let vel = 0; // minutes per frame, for the glide after release
+  let dragX: number | null = null;
+  let lastX = 0;
+  let hoverX: number | null = null; // pointer x in CSS px, or null
+  let hover = 0; // 0..1, eased presence of the pointer
+  let hx = 0; // eased pointer x
+  let press = 0; // 0..1, eased "held" state
+  let lastEmit = NaN;
+  let lastPhase = '';
+  let w = 0;
 
-  const draw = () => {
-    const w = root.clientWidth || window.innerWidth;
-    svg.setAttribute('width', String(w));
-    svg.setAttribute('viewBox', `0 0 ${w} ${H + 22}`);
-    const cx = w / 2;
-    const when = new Date(Date.now() + offset * 60_000);
-    const half = w / 2;
-    const parts: string[] = [`<rect x="0" y="${BASE}" width="${w}" height="2" fill="var(--ink-type)"/>`];
+  const resize = () => {
+    w = root.clientWidth;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(H * dpr);
+    canvas.style.height = `${H}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
 
-    // snap the lattice to real 10-minute marks so lines slide under the marker as you drag
-    const centreMin = when.getTime() / 60_000;
-    const first = Math.ceil((centreMin - (half / PX_PER_STEP) * STEP_MIN) / STEP_MIN) * STEP_MIN;
-    for (let m = first; ; m += STEP_MIN) {
-      const x = cx + ((m - centreMin) / STEP_MIN) * PX_PER_STEP;
-      if (x > w) break;
-      const t = new Date(m * 60_000);
-      const dist = Math.abs(x - cx) / half;
-      const onHour = t.getMinutes() === 0;
-      // focus by spacing, not opacity: far from the centre only every 2nd, then 3rd, line survives
-      const keepEvery = dist > 0.8 ? 3 : dist > 0.55 ? 2 : 1;
-      if (!onHour && (t.getMinutes() / STEP_MIN) % keepEvery !== 0) continue;
-      const { h, up } = sunHeight(t, 70);
-      const hh = h * (1 - 0.38 * dist);
-      const lw = onHour ? 4 : 2;
-      parts.push(
-        `<rect x="${(x - lw / 2).toFixed(1)}" y="${(BASE - hh).toFixed(1)}" width="${lw}" height="${hh.toFixed(1)}" fill="var(${up ? '--ink-type' : '--ink-planet'})"/>`,
-      );
-      if (onHour)
-        parts.push(
-          `<text x="${x.toFixed(1)}" y="${BASE + 20}" text-anchor="middle" class="cel-dot" font-size="14" fill="var(--ink-type)">${two(t.getHours())}</text>`,
-        );
+  const emit = () => {
+    const rounded = Math.round(target);
+    if (rounded === lastEmit) return;
+    lastEmit = rounded;
+    onChange(new Date(Date.now() + target * 60_000), rounded);
+  };
+
+  const frame = () => {
+    // glide after release, then spring the drawn band toward the target
+    if (dragX == null && Math.abs(vel) > 0.01) {
+      target = Math.max(-LIMIT, Math.min(LIMIT, target + vel));
+      vel *= 0.93;
+      emit();
     }
-    // the fixed marker: fire ink, with a solid triangle on top
-    parts.push(
-      `<rect x="${cx - 3}" y="0" width="6" height="${BASE + 8}" fill="var(--ink-fire)"/>`,
-      `<polygon points="${cx - 9},0 ${cx + 9},0 ${cx},12" fill="var(--ink-fire)"/>`,
-    );
-    svg.innerHTML = parts.join('');
+    shown += (target - shown) * (still ? 1 : 0.22);
+    hover += ((hoverX == null ? 0 : 1) - hover) * 0.14;
+    if (hoverX != null) hx += (hoverX - hx) * 0.25;
+    press += ((dragX == null ? 0 : 1) - press) * 0.2;
 
+    const css = getComputedStyle(root);
+    const type = css.getPropertyValue('--ink-type').trim();
+    const planet = css.getPropertyValue('--ink-planet').trim();
+    const fire = css.getPropertyValue('--ink-fire').trim();
+
+    const now = Date.now();
+    const centre = (now + shown * 60_000) / 60_000; // minutes since epoch under the marker
+    const cx = w / 2;
+    const base = H - 6;
+    ctx.clearRect(0, 0, w, H);
+
+    const first = Math.ceil((centre - (cx / GAP) * STEP_MIN) / STEP_MIN) * STEP_MIN;
+    for (let m = first; ; m += STEP_MIN) {
+      const x = cx + ((m - centre) / STEP_MIN) * GAP;
+      if (x > w) break;
+      const s = sun(m * 60_000);
+      const edge = 1 - Math.pow(Math.abs(x - cx) / cx, 2.2) * 0.75; // lines relax toward the ends
+      let h = (5 + s * 46) * edge;
+      // lines lean up toward the pointer, like grass under a hand
+      if (hover > 0.01) {
+        const d = (x - hx) / 46;
+        h += Math.exp(-d * d) * 16 * hover;
+      }
+      // and part slightly around the centre line while it is held
+      const dc = (x - cx) / 30;
+      h *= 1 - Math.exp(-dc * dc) * 0.35 * press;
+      ctx.fillStyle = s > 0 ? type : planet;
+      ctx.fillRect(Math.round(x) - 1, base - h, 2, h);
+    }
+
+    // the chosen moment: one fire-ink line that grows when held
+    const ch = 62 + press * 14;
+    ctx.fillStyle = fire;
+    ctx.fillRect(cx - 1.5 - press, base - ch, 3 + press * 2, ch + 6);
+
+    const when = new Date(now + target * 60_000);
+    const label = `${two(when.getHours())}:${two(when.getMinutes())}`;
+    if (time.textContent !== label) time.textContent = label;
     const phase = phaseAt(when);
-    phaseEl.textContent = phase;
-    timeEl.textContent = `${two(when.getHours())}:${two(when.getMinutes())}`;
-    const a = Math.abs(Math.round(offset));
-    deltaEl.textContent = a < 1 ? 'NOW' : `${offset > 0 ? '+' : '−'}${Math.floor(a / 60)} H ${two(a % 60)} M`;
-    root.setAttribute('aria-valuetext', `${timeEl.textContent}, ${phase}`);
-    document.documentElement.dataset.phase = phase;
+    if (phase !== lastPhase) {
+      lastPhase = phase;
+      document.documentElement.dataset.phase = phase;
+      root.setAttribute('aria-valuetext', `${label}, ${phase}`);
+    }
+    requestAnimationFrame(frame);
   };
 
   const set = (next: number) => {
-    offset = Math.max(-720, Math.min(720, next));
-    draw();
-    onChange(new Date(Date.now() + offset * 60_000), offset);
+    target = Math.max(-LIMIT, Math.min(LIMIT, next));
+    emit();
   };
 
-  let dragX: number | null = null;
-  let dragStart = 0;
   root.addEventListener('pointerdown', (e) => {
-    dragX = e.clientX;
-    dragStart = offset;
+    dragX = lastX = e.clientX;
+    vel = 0;
     root.setPointerCapture(e.pointerId);
     root.classList.add('is-dragging');
   });
   root.addEventListener('pointermove', (e) => {
+    hoverX = e.clientX - root.getBoundingClientRect().left;
     if (dragX == null) return;
-    // drag the band, not the marker: pulling right brings earlier time under the marker
-    set(dragStart - ((e.clientX - dragX) / PX_PER_STEP) * STEP_MIN);
+    // drag the band, not the marker: pulling right brings earlier time under the line
+    const dMin = -((e.clientX - lastX) / GAP) * STEP_MIN;
+    lastX = e.clientX;
+    vel = vel * 0.6 + dMin * 0.4;
+    set(target + dMin);
   });
   const end = () => {
     dragX = null;
@@ -134,16 +174,22 @@ export function createScrubber(onChange: (when: Date, offsetMin: number) => void
   };
   root.addEventListener('pointerup', end);
   root.addEventListener('pointercancel', end);
-  root.addEventListener('dblclick', () => set(0));
+  root.addEventListener('pointerleave', () => (hoverX = null));
+  root.addEventListener('dblclick', () => {
+    vel = 0;
+    set(0);
+  });
   root.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') set(offset + (e.shiftKey ? 60 : 10));
-    else if (e.key === 'ArrowLeft') set(offset - (e.shiftKey ? 60 : 10));
+    if (e.key === 'ArrowRight') set(target + (e.shiftKey ? 60 : 10));
+    else if (e.key === 'ArrowLeft') set(target - (e.shiftKey ? 60 : 10));
     else if (e.key === 'Home' || e.key === 'Escape') set(0);
   });
 
-  new ResizeObserver(draw).observe(root);
-  window.setInterval(draw, 60_000);
-  queueMicrotask(draw);
+  new ResizeObserver(resize).observe(root);
+  queueMicrotask(() => {
+    resize();
+    requestAnimationFrame(frame);
+  });
 
-  return { el: root, offsetMinutes: () => offset, reset: () => set(0) };
+  return { el: root, offsetMinutes: () => Math.round(target), reset: () => set(0) };
 }

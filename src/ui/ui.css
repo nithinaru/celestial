@@ -372,3 +372,184 @@
     bottom: 170px;
   }
 }
+
+/* ---------- motion: let the interface speak, not the words ----------
+   Everything settles on the same soft spring, so the UI feels like one liquid material. */
+.cel-ui {
+  --spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* scrubber: lines, and one small time */
+.cel-scrubber {
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.cel-scrubber__band {
+  display: block;
+  width: 100%;
+}
+.cel-scrubber__time {
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  transition: transform 500ms var(--spring);
+}
+.cel-scrubber.is-dragging .cel-scrubber__time {
+  transform: scale(1.5) translateY(2px);
+  color: var(--ink-fire);
+}
+
+/* view switch: the cream pill slides between the two words */
+.cel-views {
+  position: relative;
+}
+.cel-views__pill {
+  position: absolute;
+  inset: 0 50% 0 0;
+  background: var(--ink-type);
+  transition: inset 520ms var(--spring);
+}
+.cel-views[data-view='horizon'] .cel-views__pill {
+  inset: 0 0 0 50%;
+}
+.cel-views__btn {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  transition: color 300ms var(--ease), transform 400ms var(--spring);
+}
+.cel-views__btn[aria-pressed='true'] {
+  background: none;
+}
+.cel-views__btn:active {
+  transform: scale(0.94);
+}
+
+/* counter: the number breathes when you touch it */
+.cel-counter {
+  bottom: 150px;
+  pointer-events: auto;
+}
+.cel-counter__n {
+  transform-origin: left bottom;
+  transition: transform 700ms var(--spring);
+}
+.cel-counter:hover .cel-counter__n {
+  transform: scale(1.08) rotate(-2deg);
+}
+.cel-counter__words {
+  transition: transform 700ms var(--spring) 40ms;
+}
+.cel-counter:hover .cel-counter__words {
+  transform: translateX(10px);
+}
+
+/* legend: four marks; the words pour out only when you reach for one */
+.cel-legend {
+  bottom: 150px;
+  width: auto;
+  border-top: 0;
+  padding-top: 0;
+  gap: 4px;
+  align-items: flex-end;
+  pointer-events: auto;
+}
+.cel-legend__row {
+  flex-direction: row-reverse;
+  gap: 14px;
+  padding: 5px 0;
+  cursor: default;
+}
+.cel-legend__desc {
+  display: none;
+}
+.cel-legend__text {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(14px);
+  transition:
+    max-width 600ms var(--ease),
+    opacity 300ms var(--ease),
+    transform 600ms var(--spring);
+}
+.cel-legend__row:hover .cel-legend__text,
+.cel-legend:focus-within .cel-legend__text {
+  max-width: 160px;
+  opacity: 1;
+  transform: none;
+}
+.cel-legend__mark::before {
+  transition: transform 600ms var(--spring);
+}
+.cel-legend__row:hover .cel-legend__mark::before {
+  transform: scale(1.35);
+}
+.cel-legend__row:hover .cel-legend__mark--iss::before {
+  transform: rotate(135deg) scale(1.35);
+}
+
+/* card: unrolls like a poster being pinned up, rows follow one after another */
+.cel-card {
+  transform-origin: top right;
+  animation: cel-pin 720ms var(--spring) both;
+}
+.cel-card__body > *,
+.cel-card__row {
+  animation: cel-rise 620ms var(--ease) both;
+}
+.cel-card__body > :nth-child(1) { animation-delay: 90ms; }
+.cel-card__body > :nth-child(2) { animation-delay: 140ms; }
+.cel-card__body > :nth-child(3) { animation-delay: 190ms; }
+.cel-card__row:nth-child(1) { animation-delay: 250ms; }
+.cel-card__row:nth-child(2) { animation-delay: 310ms; }
+.cel-card__row:nth-child(3) { animation-delay: 370ms; }
+.cel-meter span {
+  transition: transform 500ms var(--spring);
+}
+.cel-card__row:hover .cel-meter span.is-on {
+  transform: translateY(-3px);
+}
+.cel-meter span:nth-child(2n) { transition-delay: 30ms; }
+.cel-meter span:nth-child(3n) { transition-delay: 60ms; }
+.cel-card__art .cel-tapestry {
+  transition: scale 700ms var(--spring);
+}
+.cel-card__art:hover .cel-tapestry {
+  scale: 1.06;
+}
+.cel-card__hint {
+  transform: translateY(100%);
+  transition: transform 450ms var(--spring);
+}
+.cel-card__art:hover .cel-card__hint,
+.cel-card__art:focus-visible .cel-card__hint {
+  transform: none;
+}
+@keyframes cel-pin {
+  from { opacity: 0; transform: translateY(18px) scale(0.94) rotate(1.5deg); }
+}
+@keyframes cel-rise {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cel-ui *,
+  .cel-ui *::before {
+    animation: none !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+/* horizon view: the counter lifts into the sky so it never sits on the planet */
+.cel-counter {
+  transition: transform 1100ms var(--spring);
+}
+.cel-ui[data-view='horizon'] .cel-counter {
+  transform: translateY(calc(-100vh + 470px));
+}
