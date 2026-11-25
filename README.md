@@ -13,7 +13,9 @@ npm run dev
 |---|---|
 | `src/data/skyEvents.ts` | `getSkyEvents()` returns normalized `SkyEvent[]`; `watchIss()` ticks the live ISS position every second |
 | `src/globe/createGlobe.ts` | globe.gl rendering only, no UI chrome |
-| `src/globe/dayNightMaterial.ts` | globe shader: city lights at night, dimmed day map, glowing night line |
+| `src/globe/dayNightMaterial.ts` | engraved globe shader: flat inks, night-side hatching, 15° graticule, 1px coasts and night line |
+| `src/globe/armillary.ts` | equator and ecliptic rings with 10° ticks, dashed ISS orbit, view switch |
+| `src/globe/marks.ts` | aurora curtain strokes, fireball stars with entry streaks (JPL velocity) |
 | `src/sky/sun.ts` | subsolar point from the date, and how dark any spot is |
 | `src/ui/timeSlider.ts` | bare fireball time scrubber |
 | `src/ui/detailCard.ts` | bare event detail card |

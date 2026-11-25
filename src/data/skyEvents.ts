@@ -30,7 +30,7 @@ const FEEDS = {
     fallback: '/fallback/aurora.json',
   },
   // JPL sends no CORS header, so the browser goes through our proxy (vite.config.ts in dev, api/fireball.ts on Vercel).
-  fireball: { live: '/api/fireball?limit=200', fallback: '/fallback/fireball.json' },
+  fireball: { live: '/api/fireball?limit=200&vel-comp=true', fallback: '/fallback/fireball.json' },
   // CelesTrak rate-limits per address, so go through our cached proxy (api/iss.ts).
   iss: { live: '/api/iss', fallback: '/fallback/iss.json' },
 } as const;
@@ -96,8 +96,8 @@ interface FireballFeed {
 
 export function parseFireballs(feed: FireballFeed): SkyEvent[] {
   const col = (name: string) => feed.fields.indexOf(name);
-  const [iDate, iEnergy, iImpact, iLat, iLatDir, iLon, iLonDir, iAlt, iVel] = [
-    'date', 'energy', 'impact-e', 'lat', 'lat-dir', 'lon', 'lon-dir', 'alt', 'vel',
+  const [iDate, iEnergy, iImpact, iLat, iLatDir, iLon, iLonDir, iAlt, iVel, iVx, iVy, iVz] = [
+    'date', 'energy', 'impact-e', 'lat', 'lat-dir', 'lon', 'lon-dir', 'alt', 'vel', 'vx', 'vy', 'vz',
   ].map(col);
   const num = (v: string | null) => (v == null ? null : Number(v));
 
@@ -123,6 +123,10 @@ export function parseFireballs(feed: FireballFeed): SkyEvent[] {
         radiatedEnergyJ: row[iEnergy] == null ? null : Number(row[iEnergy]) * 1e10,
         altitudeKm: num(row[iAlt]),
         velocityKmS: num(row[iVel]),
+        // pre-entry velocity, Earth-centred Earth-fixed km/s (x: 0°E, y: 90°E, z: north); -1 index → null
+        vx: iVx < 0 ? null : num(row[iVx]),
+        vy: iVy < 0 ? null : num(row[iVy]),
+        vz: iVz < 0 ? null : num(row[iVz]),
         source: 'NASA JPL CNEOS',
       },
     });

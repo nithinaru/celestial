@@ -24,10 +24,10 @@ export const state: {
 const ui = mountUI();
 const globe = createGlobe(document.querySelector<HTMLDivElement>('#globe')!);
 
-const setSun = (sun: LatLng, overridden: boolean) => {
+const setSun = (sun: LatLng, overridden: boolean, when = new Date()) => {
   state.sun = sun;
   state.sunOverridden = overridden;
-  globe.setSun(sun);
+  globe.setSun(sun, when);
   window.dispatchEvent(new CustomEvent('celestial:sun', { detail: { sun, overridden } }));
 };
 setSun(state.sun, false);
@@ -49,13 +49,13 @@ globe.onSelect(select);
 // Dragging the day scrubber moves the sun, so the night line sweeps across the Earth.
 window.addEventListener('celestial:daytime', (e) => {
   const { when, offsetMinutes } = (e as CustomEvent<{ when: Date; offsetMinutes: number }>).detail;
-  setSun(subsolarPoint(when), offsetMinutes !== 0);
+  setSun(subsolarPoint(when), offsetMinutes !== 0, when);
 });
 
 state.events = await getSkyEvents();
 globe.setEvents(state.events);
 ui.setEvents(state.events);
-watchIss((iss, trail) => globe.setIss(iss, trail));
+watchIss((iss, trail) => globe.setIss(iss, trail), 4); // a short trail: 4 minutes of orbit
 
 const counts = state.events.reduce<Record<string, number>>(
   (acc, e) => ((acc[e.type] = (acc[e.type] ?? 0) + 1), acc),

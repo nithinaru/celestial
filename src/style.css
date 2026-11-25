@@ -12,12 +12,12 @@ body {
 }
 
 .iss-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  /* a small cream diamond, the same mark as the legend */
+  width: 9px;
+  height: 9px;
   background: var(--ink-type, #f1e6c8);
-  
-  transform: translate(-50%, -50%);
+  outline: 1.5px solid var(--ink-ground, #0e1524);
+  transform: translate(-50%, -50%) rotate(45deg);
   cursor: pointer;
   pointer-events: auto;
 }
@@ -27,9 +27,8 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 1.5px solid rgba(160, 175, 255, 0.9);
-  background: rgba(20, 24, 60, 0.6);
-  
+  border: 1.5px solid var(--ink-type, #f1e6c8);
+  background: var(--ink-ground, #0e1524);
   transform: translate(-50%, -50%);
   cursor: grab;
   pointer-events: auto;
