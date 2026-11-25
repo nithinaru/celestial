@@ -188,7 +188,12 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
           .filter((e) => e.type === 'aurora' && e.intensity >= 20)
           .map((e) => `${e.lat >= 0 ? 'N' : 'S'}${Math.floor((e.lng + 180) / 30)}`),
       );
-      const aurora = regions.size;
+      // Demo data names its towns, so it can say "places"; the live grid can only say "regions".
+      const places = new Set(
+        events.filter((e) => e.type === 'aurora' && e.details.place).map((e) => e.details.place),
+      );
+      const noun = places.size ? 'place' : 'region';
+      const aurora = places.size || regions.size;
       const was = big.textContent;
       big.textContent = String(aurora);
       // a refreshed count ticks in; an unchanged one (or the first fill from 0) stays put
@@ -200,7 +205,7 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
         if (!reduced.matches)
           big.animate({ transform: ['translateY(0.25em)', 'none'] }, { ...t, composite: 'add' });
       }
-      words.textContent = `${aurora === 1 ? 'region can' : 'regions can'} see the aurora right now`;
+      words.textContent = `${noun}${aurora === 1 ? '' : 's'} can see the aurora right now`;
     },
   };
 }

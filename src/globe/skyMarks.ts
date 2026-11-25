@@ -1,5 +1,5 @@
 import type { SkyEvent } from '../data/skyEvents';
-import { createTapestry, type TapestryKind } from '../ui/tapestry';
+import type { TapestryKind } from '../ui/tapestry';
 
 /**
  * The things that move, drawn in characters and pinned to the globe:
@@ -17,13 +17,11 @@ export interface SkyMark {
 
 // Where in the picture the "real" point is, as a fraction of its width and height:
 // the fireball's burning head, and the foot of the aurora's brightest curtain.
-const ANCHOR: Record<TapestryKind, [number, number]> = {
+export const ANCHOR: Record<TapestryKind, [number, number]> = {
   fireball: [0.9, 0.74],
   aurora: [0.5, 0.86],
   iss: [0.5, 0.5],
 };
-const CELL: Record<TapestryKind, number> = { fireball: 1.9, aurora: 1.5, iss: 0.8 };
-const SIZE: Record<TapestryKind, [number, number]> = { fireball: [110, 44], aurora: [120, 60], iss: [80, 40] };
 
 const marks: { aurora: SkyMark | null; fireball: SkyMark | null } = { aurora: null, fireball: null };
 
@@ -51,22 +49,10 @@ export function setSelectedMark(event: SkyEvent | null): boolean {
   return changed;
 }
 
+/** The sprites themselves are printed onto the globe (see skySprites.ts); the html layer only carries labels. */
 export function markElement(m: SkyMark): HTMLElement {
-  const [cols, rows] = SIZE[m.sprite];
-  const [ax, ay] = ANCHOR[m.sprite];
-  const w = cols * CELL[m.sprite];
-  const h = rows * CELL[m.sprite];
-
   const el = document.createElement('div');
   el.className = `cel-mark cel-mark--${m.sprite}`;
-  // the tapestry centres itself on its parent; shift it so its anchor lands on the point
-  const art = document.createElement('div');
-  art.className = 'cel-mark__art';
-  art.style.left = `${(0.5 - ax) * w}px`;
-  art.style.top = `${(0.5 - ay) * h}px`;
-  art.append(createTapestry(m.sprite, { cell: CELL[m.sprite] }).el);
-  el.append(art);
-
   if (m.label) {
     const tag = document.createElement('div');
     tag.className = 'cel-mark__label cel-poster';

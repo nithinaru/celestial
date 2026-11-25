@@ -2,10 +2,10 @@ import Globe from 'globe.gl';
 import { Vector3 } from 'three';
 import type { SkyEvent } from '../data/skyEvents';
 import { angularDistance, darkness, wrapLng, type LatLng } from '../sky/sun';
-import { createTapestry } from '../ui/tapestry';
 import { createArmillary } from './armillary';
 import { createDayNightMaterial } from './dayNightMaterial';
-import { markElement, setAuroraMark, setSelectedMark, skyMarks, type SkyMark } from './skyMarks';
+import { ANCHOR, markElement, setAuroraMark, setSelectedMark, skyMarks, type SkyMark } from './skyMarks';
+import { createSkySprite, type SkySprite } from './skySprites';
 
 export interface SkyGlobe {
   setEvents(events: SkyEvent[]): void;
@@ -20,7 +20,6 @@ export interface SkyGlobe {
   setFireballTime(t: number): void;
 }
 
-const FIREBALL_RGB = '232, 116, 59'; // --ink-fire // redder than the sodium-orange city lights on the night texture
 const ISS_RGB = '241, 230, 200'; // --ink-type
 const DAY_OPACITY = 0.15; // how much of an event survives in daylight
 const AURORA_RECOMPUTE_MS = 200; // heatmap KDE is async + heavy; redo it once dragging settles
@@ -34,6 +33,23 @@ interface Handle {
   lng: number;
 }
 const SIDE_OFFSET = { dusk: 90, dawn: -90 } as const; // degrees east of the subsolar point
+const SELECTED_SCALE = 1.9; // a selected fireball's streak grows to meet the card
+const GEOMAGNETIC_POLE = { lat: 80.7, lng: -72.7 }; // the aurora curtain bends round this
+
+/** Meteors come in from every direction; give each a stable one so it doesn't spin between refreshes. */
+function headingFor(id: string) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 360) - 180;
+}
+/** Initial compass bearing from a to b, degrees clockwise from north. */
+function bearing(a: LatLng, b: LatLng) {
+  const r = Math.PI / 180;
+  const y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+  const x =
+    Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+  return Math.atan2(y, x) / r;
+}
 
 /** Globe rendering only: real-sun terminator, aurora heat layer, fireball points, moving ISS. No UI chrome. */
 export function createGlobe(el: HTMLElement): SkyGlobe {
@@ -60,8 +76,38 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     return best;
   };
   let fireballTime = Date.now();
-  const showFireballs = () =>
-    globe.pointsData(fireballs.filter((e) => Date.parse(e.time) <= fireballTime));
+  // Each fireball is drawn as the poster's streak, printed onto the globe; the points underneath
+  // stay as invisible hit targets so clicking still works.
+  const streaks = new Map<string, { sprite: SkySprite; event: SkyEvent }>();
+  let selectedId: string | null = null;
+  const showFireballs = () => {
+    const shown = fireballs.filter((e) => Date.parse(e.time) <= fireballTime);
+    globe.pointsData(shown);
+    const keep = new Set(shown.map((e) => e.id));
+    for (const [id, s] of streaks)
+      if (!keep.has(id)) {
+        s.sprite.setPlace(null); // fades, then removes itself
+        streaks.delete(id);
+      }
+    for (const e of shown) {
+      let s = streaks.get(e.id);
+      if (!s) {
+        const sprite = createSkySprite(
+          globe,
+          'fireball',
+          ANCHOR.fireball,
+          // bigger impacts, bigger streaks (log, since energy spans 0.07 kt to 400+ kt)
+          { type: 'shell', widthDeg: 5 + Math.log10(1 + e.intensity) * 3.5, alt: 0.012, lift: 0.05 },
+          { reveal: true, disposable: true },
+        );
+        s = { sprite, event: e };
+        streaks.set(e.id, s);
+        sprite.setPlace({ lat: e.lat, lng: e.lng, heading: headingFor(e.id) });
+        sprite.setScale(e.id === selectedId ? SELECTED_SCALE : 1);
+      }
+      s.sprite.setOpacity(lit(e));
+    }
+  };
 
   const material = createDayNightMaterial();
   const handles: Handle[] = [
@@ -82,7 +128,7 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     .pointLng('lng')
     .pointAltitude(0.01)
     .pointRadius((d) => 0.75 + Math.log10(1 + (d as SkyEvent).intensity) * 0.75)
-    .pointColor((d) => `rgba(${FIREBALL_RGB}, ${lit(d as SkyEvent)})`)
+    .pointColor(() => 'rgba(0, 0, 0, 0)') // hit targets only: the streak sprites carry the picture
     .pointLabel((d) => (d as SkyEvent).label)
     .onPointClick((d) => selectCb(d))
     .onGlobeClick((p) => {
@@ -135,7 +181,8 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
   function issElement(d: object) {
     issDot = document.createElement('div');
     issDot.className = 'iss-dot';
-    issDot.append(createTapestry('iss', { cell: 0.8 }).el); // the station, drawn in characters
+    // the station itself is printed onto the globe (issSprite); this is just its click target
+    issDot.style.width = issDot.style.height = '26px';
     issDot.title = (d as SkyEvent).label;
     issDot.onclick = () => selectCb(d);
     // the globe counts a click from pointerdown on its container; don't let it also see an empty-globe click
@@ -169,16 +216,38 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
   }
 
   const armillary = createArmillary(globe);
+
+  const poleAt = globe.getCoords(GEOMAGNETIC_POLE.lat, GEOMAGNETIC_POLE.lng);
+  const auroraCurtain = createSkySprite(globe, 'aurora', ANCHOR.aurora, {
+    type: 'curtain',
+    pole: new Vector3(poleAt.x, poleAt.y, poleAt.z).normalize(),
+    spanDeg: 46,
+    height: 0.2,
+    tiltDeg: 28,
+    alt: 0.012,
+  });
+  const issSprite = createSkySprite(globe, 'iss', ANCHOR.iss, { type: 'shell', widthDeg: 9, alt: 0.06 });
+  const syncMarks = () => {
+    const a = skyMarks().find((m) => m.sprite === 'aurora');
+    auroraCurtain.setPlace(a ? { lat: a.lat, lng: a.lng } : null);
+  };
   globe.pointOfView({ lat: 24, lng: -30, altitude: 2.9 }); // tilted so the rings open into ellipses
   window.addEventListener('celestial:view', (e) =>
     armillary.setView((e as CustomEvent<'armillary' | 'horizon'>).detail),
   );
 
   const refreshHtml = () =>
-    globe.htmlElementsData([...(issEl ? [issEl] : []), ...handles, ...skyMarks()]);
-  // a selected fireball gets its ASCII streak on the globe
+    globe.htmlElementsData([...(issEl ? [issEl] : []), ...handles, ...skyMarks().filter((m) => m.label)]);
+  // a selected fireball's streak grows and gets its label; the rest settle back
   window.addEventListener('celestial:select', (e) => {
-    if (setSelectedMark((e as CustomEvent<SkyEvent | null>).detail)) refreshHtml();
+    const ev = (e as CustomEvent<SkyEvent | null>).detail;
+    const next = ev?.type === 'fireball' ? ev.id : null;
+    if (next !== selectedId) {
+      streaks.get(selectedId ?? '')?.sprite.setScale(1);
+      streaks.get(next ?? '')?.sprite.setScale(SELECTED_SCALE);
+      selectedId = next;
+    }
+    if (setSelectedMark(ev)) refreshHtml();
   });
 
   const fit = () => globe.width(el.clientWidth).height(el.clientHeight);
@@ -192,12 +261,17 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       aurora = events.filter((e) => e.type === 'aurora');
       globe.heatmapsData([aurora]);
       setAuroraMark(aurora);
+      syncMarks();
       refreshHtml();
     },
     setIss(iss, trail) {
       // keep one object so globe.gl reuses the html element instead of rebuilding it each second
       issEl = Object.assign(issEl ?? {}, iss);
       refreshHtml();
+      // the station glides between its once-a-second fixes, nose along the orbit
+      const prev = trail.length > 1 ? trail[trail.length - 2] : null;
+      issSprite.setPlace({ lat: iss.lat, lng: iss.lng, heading: prev ? bearing(prev, iss) : 90 });
+      issSprite.setOpacity(lit(issEl));
       globe.pathsData([trail]);
       armillary.setOrbit(trail);
       if (issDot) issDot.style.opacity = String(lit(issEl));
@@ -210,9 +284,9 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       for (const h of handles) h.lng = wrapLng(sun.lng + SIDE_OFFSET[h.side]);
       refreshHtml();
 
-      // re-run the accessors so every event picks up the new darkness
-      globe.pointColor(globe.pointColor());
-      if (issEl && issDot) issDot.style.opacity = String(lit(issEl));
+      // every event picks up the new darkness
+      for (const s of streaks.values()) s.sprite.setOpacity(lit(s.event));
+      if (issEl) issSprite.setOpacity(lit(issEl));
       clearTimeout(auroraTimer);
       auroraTimer = setTimeout(
         () => globe.heatmapPointWeight(globe.heatmapPointWeight()),

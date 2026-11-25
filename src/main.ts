@@ -1,5 +1,5 @@
 import './style.css';
-import { getSkyEvents, watchIss, type SkyEvent } from './data/skyEvents';
+import type { SkyEvent } from './data/skyEvents';
 import { createGlobe } from './globe/createGlobe';
 import { subsolarPoint, type LatLng } from './sky/sun';
 import { mountUI } from './ui/mount';
@@ -52,6 +52,9 @@ window.addEventListener('celestial:daytime', (e) => {
   setSun(subsolarPoint(when), offsetMinutes !== 0);
 });
 
+// The demo runs on hard-coded events (data/demoEvents.ts). Add ?live to the URL for the real feeds.
+const live = new URLSearchParams(location.search).has('live');
+const { getSkyEvents, watchIss } = live ? await import('./data/skyEvents') : await import('./data/demoEvents');
 state.events = await getSkyEvents();
 globe.setEvents(state.events);
 ui.setEvents(state.events);
