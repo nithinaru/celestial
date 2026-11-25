@@ -92,11 +92,11 @@ export function createDayNightMaterial() {
 
         // engraving: parallel diagonal cuts, night side only
         float hatch = hairline((vWorldPos.x + vWorldPos.y) / 4.5, 1.0);
-        color = mix(color, line, hatch * night * 0.1 * fill);
+        color = mix(color, line, hatch * night * 0.06 * fill);
 
         // contour lines: one engraved rule every 1/16 of the elevation range, on land only
         float contour = hairline(hgt * 16.0, 1.0) * isLand * step(0.03, hgt);
-        color = mix(color, mix(oceanNight, line, night), contour * 0.28 * fill);
+        color = mix(color, mix(oceanNight, line, night), contour * 0.16 * fill);
 
         // graticule every 15°
         float grat = max(hairline(vUv.x * 24.0, 1.0), hairline(vUv.y * 12.0, 1.0));

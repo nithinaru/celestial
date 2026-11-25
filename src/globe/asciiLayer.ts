@@ -25,7 +25,7 @@ interface GlobeLike {
 const ANCHOR = { fireball: [0.9, 0.74], iss: [0.5, 0.5] } as const satisfies Record<string, [number, number]>;
 const GEOMAGNETIC_POLE = { lat: 80.7, lng: -72.7 }; // the ASCII curtain rings this
 const SELECTED_SCALE = 1.4;
-const FEATURED = 15; // fireballs printed at full, readable size
+const FEATURED = 15; // the only fireballs that get an ASCII streak; the rest are star + engraved line
 
 // A streak burns: it lifts, swells, heat runs along it and the frames quicken.
 const FIREBALL_HOVER: HoverStyle = { rise: 0.02, grow: 0.18, roll: 0, flare: 1, quicken: 3 };
@@ -77,16 +77,17 @@ export function createAsciiLayer(globe: GlobeLike) {
     /** which fireballs are on the globe, and how visible each one is (darkness) */
     setFireballs(shown: SkyEvent[], alpha: (e: SkyEvent) => number) {
       alphaOf = alpha;
-      // the strongest few are printed large enough to read every character; the rest stay small
+      // only the strongest few get an ASCII streak, printed large enough to read every character;
+      // 198 sprites at once buried the globe
       const big = new Set([...shown].sort((a, b) => b.intensity - a.intensity).slice(0, FEATURED).map((e) => e.id));
-      const keep = new Set(shown.map((e) => e.id));
+      const keep = big;
       for (const [id, s] of streaks)
         if (!keep.has(id) || s.big !== big.has(id)) {
           s.sprite.setPlace(null); // fades, then removes itself
           streaks.delete(id);
         }
       for (const e of shown) {
-        if (streaks.has(e.id)) continue;
+        if (streaks.has(e.id) || !big.has(e.id)) continue;
         const featured = big.has(e.id);
         // small ones match the engraved trail, so the star sits right on the ASCII head
         const len = 6 + Math.log10(1 + e.intensity) * 6;

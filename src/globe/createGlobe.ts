@@ -7,7 +7,7 @@ import { createClouds } from './clouds';
 import { createDayNightMaterial } from './dayNightMaterial';
 import { createLabels, fireballStar, issDiamond, nightHandle, type Touchable } from './interactive';
 import { createAsciiLayer } from './asciiLayer';
-import { createAuroraCurtain, createFireballMarks } from './marks';
+import { createFireballMarks } from './marks';
 
 export interface SkyGlobe {
   setEvents(events: SkyEvent[]): void;
@@ -166,7 +166,6 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     .pathTransitionDuration(0);
 
   const fireballMarks = createFireballMarks(globe);
-  const curtain = createAuroraCurtain(globe);
   const ascii = createAsciiLayer(globe); // the Paper tapestry sprites, printed into the scene
   const clouds = createClouds(globe);
 
@@ -287,7 +286,6 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       ascii.setIntro(ev);
       for (const [d, t] of touchables) t.setAlpha(alphaFor(d));
     }
-    curtain.frame(now / 1000, eventsIntro, el.clientHeight * (window.devicePixelRatio || 1));
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -312,7 +310,6 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       fireballs = events.filter((e) => e.type === 'fireball');
       showFireballs();
       aurora = events.filter((e) => e.type === 'aurora');
-      curtain.setEvents(aurora);
       ascii.setAurora(aurora, sun);
     },
     setIss(iss, trail) {
@@ -330,7 +327,6 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       const dir = new Vector3(c.x, c.y, c.z).normalize();
       material.uniforms.sunDirection.value.copy(dir);
       armillary.setSun(dir, date);
-      curtain.setSun(dir);
       clouds.setSun(dir);
 
       for (const h of handles) h.lng = wrapLng(sun.lng + SIDE_OFFSET[h.side]);
