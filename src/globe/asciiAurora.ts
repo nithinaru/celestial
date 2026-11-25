@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   BufferAttribute,
   DoubleSide,
   Mesh,
@@ -81,7 +80,7 @@ const frag = /* glsl */ `
       * (1.0 - smoothstep(0.55, 1.0, vUv.y));      // and no hard top edge: it thins into the sky
     a = min(1.0, a * (1.0 + vGlow * 0.9));
     if (a < 0.004) discard;
-    gl_FragColor = vec4(c.rgb * (1.0 + vGlow * 0.7), a); // the surge burns brighter
+    gl_FragColor = vec4(c.rgb * (1.0 + vGlow * 0.35), a); // printed inks; the surge burns a touch brighter
   }
 `;
 
@@ -112,7 +111,6 @@ export function createAuroraCurtain(globe: Globeish, northPole: Vector3): Aurora
     transparent: true,
     depthWrite: false,
     side: DoubleSide,
-    blending: AdditiveBlending, // light adds up where the near and far sheets cross
   });
   const mesh = new Mesh(geo, mat);
   mesh.frustumCulled = false;

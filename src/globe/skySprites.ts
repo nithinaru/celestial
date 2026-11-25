@@ -42,7 +42,7 @@ const INK: Record<string, string> = {
   f: '--ink-fire',
 };
 
-const CELL_PX = 8; // texture pixels per cell: enough for the glyphs to survive a close look
+const CELL_PX = 12; // texture pixels per cell: the glyphs stay legible up close
 const FPS = 4; // the sprites drift, they don't flicker
 const FADE_MS = 220; // frame cross-fade
 const REVEAL_MS = 700; // a fireball's arrival
@@ -82,22 +82,8 @@ export function atlas(kind: TapestryKind): Promise<Atlas> {
       const css = getComputedStyle(document.documentElement);
       const ink: Record<string, string> = {};
       for (const k in INK) ink[k] = css.getPropertyValue(INK[k]).trim();
-      // On the page the fireball's tail is printed in the planet inks against navy; over the black
-      // night side those vanish, so on the globe the tail is printed in fire, thinning to nothing.
+      // printed in the sprites' own inks, exactly as on the Paper sheet
       const alpha: Record<string, number> = {};
-      if (kind === 'fireball') {
-        ink.p = ink.f;
-        ink.s = ink.f;
-        alpha.p = 0.75;
-        alpha.s = 0.38;
-      }
-      if (kind === 'aurora') {
-        // the curtain is light: green throughout, thinning out where the page print used shade
-        ink.p = ink.a;
-        ink.s = ink.a;
-        alpha.p = 0.6;
-        alpha.s = 0.28;
-      }
       const c = CELL_PX;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.font = `500 ${c}px "DM Mono", ui-monospace, monospace`;

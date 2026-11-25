@@ -25,6 +25,7 @@ interface GlobeLike {
 const ANCHOR = { fireball: [0.9, 0.74], iss: [0.5, 0.5] } as const satisfies Record<string, [number, number]>;
 const GEOMAGNETIC_POLE = { lat: 80.7, lng: -72.7 }; // the ASCII curtain rings this
 const SELECTED_SCALE = 1.4;
+const FEATURED = 15; // fireballs printed at full, readable size
 
 // A streak burns: it lifts, swells, heat runs along it and the frames quicken.
 const FIREBALL_HOVER: HoverStyle = { rise: 0.02, grow: 0.18, roll: 0, flare: 1, quicken: 3 };
@@ -49,7 +50,7 @@ function bearing(a: LatLng, b: LatLng) {
 }
 
 export function createAsciiLayer(globe: GlobeLike) {
-  const streaks = new Map<string, { sprite: SkySprite; event: SkyEvent }>();
+  const streaks = new Map<string, { sprite: SkySprite; event: SkyEvent; big: boolean }>();
   let alphaOf: (e: SkyEvent) => number = () => 1;
   let intro = 0;
   let selected: string | null = null;
@@ -59,7 +60,7 @@ export function createAsciiLayer(globe: GlobeLike) {
     globe,
     'iss',
     ANCHOR.iss,
-    { widthDeg: 9, alt: 0.06, layers: 3, depth: 0.008 },
+    { widthDeg: 10, alt: 0.06, layers: 5, depth: 0.016 },
     ISS_HOVER,
   );
   let iss: SkyEvent | null = null;
@@ -76,28 +77,33 @@ export function createAsciiLayer(globe: GlobeLike) {
     /** which fireballs are on the globe, and how visible each one is (darkness) */
     setFireballs(shown: SkyEvent[], alpha: (e: SkyEvent) => number) {
       alphaOf = alpha;
+      // the strongest few are printed large enough to read every character; the rest stay small
+      const big = new Set([...shown].sort((a, b) => b.intensity - a.intensity).slice(0, FEATURED).map((e) => e.id));
       const keep = new Set(shown.map((e) => e.id));
       for (const [id, s] of streaks)
-        if (!keep.has(id)) {
+        if (!keep.has(id) || s.big !== big.has(id)) {
           s.sprite.setPlace(null); // fades, then removes itself
           streaks.delete(id);
         }
       for (const e of shown) {
         if (streaks.has(e.id)) continue;
-        // as long as the engraved trail, so the star sits right on the ASCII head
+        const featured = big.has(e.id);
+        // small ones match the engraved trail, so the star sits right on the ASCII head
         const len = 6 + Math.log10(1 + e.intensity) * 6;
         const sprite = createSkySprite(
           globe,
           'fireball',
           ANCHOR.fireball,
-          { widthDeg: len / 0.9, alt: 0.012, lift: 0.08, layers: 3, depth: 0.01 },
+          featured
+            ? { widthDeg: 24 + Math.log10(1 + e.intensity) * 6, alt: 0.014, lift: 0.025, layers: 5, depth: 0.02 }
+            : { widthDeg: len / 0.9, alt: 0.012, lift: 0.03, layers: 3, depth: 0.012 },
           FIREBALL_HOVER,
           { reveal: true, disposable: true },
         );
         sprite.setPlace({ lat: e.lat, lng: e.lng, heading: headingFor(e) });
         sprite.setScale(e.id === selected ? SELECTED_SCALE : 1);
         sprite.setHover(e.id === hovered);
-        streaks.set(e.id, { sprite, event: e });
+        streaks.set(e.id, { sprite, event: e, big: featured });
       }
       refreshAlpha();
     },
