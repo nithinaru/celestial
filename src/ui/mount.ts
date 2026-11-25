@@ -3,6 +3,7 @@ import './ui.css';
 import type { SkyEvent } from '../data/skyEvents';
 import { createEventCard, type EventCard } from './eventCard';
 import { createScrubber } from './scrubber';
+import { placeName } from '../data/places';
 
 const h = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => {
   const node = document.createElement(tag);
@@ -143,7 +144,10 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
       );
     }
   };
-  window.addEventListener('celestial:select', (e) => select((e as CustomEvent<SkyEvent | null>).detail));
+  window.addEventListener('celestial:select', (e) => {
+    const ev = (e as CustomEvent<SkyEvent | null>).detail;
+    select(ev, ev ? placeName(ev) : undefined); // name the place, like the Paper cards
+  });
   window.addEventListener('keydown', (e) => e.key === 'Escape' && select(null));
 
   return {
