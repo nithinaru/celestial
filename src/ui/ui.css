@@ -1,0 +1,374 @@
+/* Poster chrome. Rules: square corners, 2px rules, flat inks, no shadows, no blur, no gradients. */
+
+.cel-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none; /* the globe stays draggable everywhere the chrome is not */
+  color: var(--ink-type);
+  font-family: var(--font-poster);
+  --pad: clamp(20px, 3.4vw, 56px);
+}
+.cel-ui > * {
+  position: absolute;
+}
+.cel-ui button,
+.cel-scrubber,
+.cel-card {
+  pointer-events: auto;
+}
+.cel-ui * {
+  transition:
+    color var(--phase-fade),
+    background-color var(--phase-fade),
+    border-color var(--phase-fade),
+    fill var(--phase-fade);
+}
+
+/* wordmark */
+.cel-wordmark {
+  left: var(--pad);
+  top: calc(var(--pad) - 14px);
+}
+.cel-wordmark__name {
+  font-weight: 900;
+  font-size: clamp(40px, 4.6vw, 66px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.cel-wordmark__sub {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 12px 2px;
+  background: var(--ink-type);
+  color: var(--ink-ground);
+  font-size: 18px;
+  letter-spacing: 0.1em;
+}
+
+/* clock and view switch */
+.cel-top {
+  right: var(--pad);
+  top: calc(var(--pad) - 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.cel-clock {
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+.cel-views {
+  display: flex;
+  border: var(--rule) solid var(--ink-type);
+}
+.cel-views__btn {
+  all: unset;
+  cursor: pointer;
+  padding: 4px 12px 3px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+.cel-views__btn[aria-pressed='true'] {
+  background: var(--ink-type);
+  color: var(--ink-ground);
+}
+.cel-views__btn:focus-visible {
+  outline: var(--rule) solid var(--ink-fire);
+  outline-offset: 2px;
+}
+
+/* live counter */
+.cel-counter {
+  left: var(--pad);
+  bottom: 210px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 28px;
+  align-items: center;
+  max-width: 460px;
+}
+.cel-counter__n {
+  font-size: clamp(96px, 11vw, 150px);
+  line-height: 0.8;
+  color: var(--ink-aurora);
+}
+.cel-counter__words {
+  font-weight: 900;
+  font-size: clamp(24px, 2.6vw, 36px);
+  line-height: 1.05;
+  max-width: 9.5em;
+}
+.cel-counter__also {
+  grid-column: 1 / -1;
+  margin-top: 26px;
+  font-size: 17px;
+  letter-spacing: 0.06em;
+}
+.cel-counter__also::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 10px;
+  background: var(--ink-fire);
+}
+
+/* legend */
+.cel-legend {
+  right: var(--pad);
+  bottom: 210px;
+  width: 300px;
+  padding-top: 14px;
+  border-top: var(--rule) solid var(--ink-type);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cel-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 16px;
+}
+.cel-legend__desc {
+  font-weight: 300;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+.cel-legend__mark {
+  flex: 0 0 40px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+}
+.cel-legend__mark::before {
+  content: '';
+  display: block;
+}
+.cel-legend__mark--aurora::before {
+  width: 40px;
+  height: 8px;
+  background: var(--ink-aurora);
+}
+.cel-legend__mark--fireball::before {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink-fire);
+}
+.cel-legend__mark--iss::before {
+  width: 11px;
+  height: 11px;
+  background: var(--ink-type);
+  transform: rotate(45deg);
+}
+.cel-legend__mark--night::before {
+  width: 40px;
+  height: var(--rule);
+  background: var(--ink-type);
+}
+
+/* the card takes the legend's place while it is open */
+.cel-ui:has(.cel-card) .cel-legend {
+  display: none;
+}
+
+/* event card: a miniature park poster */
+.cel-card-slot {
+  right: var(--pad);
+  top: 130px;
+}
+.cel-card {
+  width: 400px;
+  max-width: calc(100vw - 2 * var(--pad));
+  background: var(--ink-ground);
+  border: var(--rule) solid var(--ink-type);
+  --event-ink: var(--ink-type);
+}
+.cel-card--aurora {
+  --event-ink: var(--ink-aurora);
+}
+.cel-card--fireball {
+  --event-ink: var(--ink-fire);
+}
+.cel-card__band {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 18px 8px;
+  background: var(--event-ink);
+  color: var(--ink-ground);
+}
+.cel-card__kind {
+  font-weight: 900;
+  font-size: 30px;
+  line-height: 1;
+}
+.cel-card__status {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+.cel-card__art {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  height: 200px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: zoom-in;
+  border-bottom: var(--rule) solid var(--ink-type);
+}
+.cel-card__art[aria-pressed='true'] {
+  cursor: zoom-out;
+}
+.cel-card__art:focus-visible {
+  outline: var(--rule) solid var(--ink-fire);
+  outline-offset: -4px;
+}
+.cel-card__hint {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 3px 8px 2px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  background: var(--ink-type);
+  color: var(--ink-ground);
+}
+.cel-tapestry {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  image-rendering: pixelated;
+}
+.cel-card--iss .cel-card__art {
+  background: var(--ink-planet-shade);
+}
+.cel-card__body {
+  padding: 22px 20px 18px;
+}
+.cel-card__place {
+  margin: 0;
+  font-weight: 900;
+  font-size: 40px;
+  line-height: 0.95;
+  letter-spacing: 0.01em;
+}
+.cel-card__coord {
+  margin-top: 10px;
+  font-size: 16px;
+  color: var(--event-ink);
+}
+.cel-card__plain {
+  margin: 16px 0 0;
+  min-height: 3.6em; /* keeps the rows aligned between cards */
+  font-size: 19px;
+  line-height: 1.25;
+}
+.cel-card__rows {
+  padding: 0 20px 6px;
+}
+.cel-card__row {
+  display: flex;
+  gap: 16px;
+  padding: 13px 0 11px;
+  border-top: var(--rule) solid var(--ink-type);
+}
+.cel-card__label {
+  flex: 0 0 100px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  padding-top: 2px;
+}
+.cel-card__value {
+  font-size: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cel-meter {
+  display: flex;
+  gap: 4px;
+}
+.cel-meter span {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: var(--rule) solid var(--ink-planet-shade);
+}
+.cel-meter span.is-on {
+  border-color: var(--event-ink);
+  background: var(--event-ink);
+}
+
+/* day scrubber */
+.cel-scrubber {
+  left: var(--pad);
+  right: var(--pad);
+  bottom: 14px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.cel-scrubber.is-dragging {
+  cursor: grabbing;
+}
+.cel-scrubber:focus-visible {
+  outline: var(--rule) solid var(--ink-fire);
+  outline-offset: 6px;
+}
+.cel-scrubber__band {
+  display: block;
+}
+.cel-scrubber__readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+.cel-scrubber__phase {
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  color: var(--ink-fire);
+}
+.cel-scrubber__time {
+  font-size: 32px;
+  line-height: 1;
+}
+.cel-scrubber__delta {
+  font-size: 15px;
+  padding: 2px 8px 1px;
+  background: var(--ink-type);
+  color: var(--ink-ground);
+}
+.cel-scrubber.is-dragging .cel-scrubber__delta {
+  background: var(--ink-fire);
+}
+
+/* paper grain: one printed sheet over everything, like ink soaked into stock */
+.cel-grain {
+  inset: 0;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 1.4 -0.35'/></filter><rect width='220' height='220' filter='url(%23n)'/></svg>");
+  background-size: 220px 220px;
+}
+
+@media (max-width: 1100px) {
+  .cel-legend {
+    display: none;
+  }
+  .cel-card-slot {
+    left: var(--pad);
+    right: var(--pad);
+    top: auto;
+    bottom: 170px;
+  }
+}

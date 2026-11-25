@@ -1,0 +1,89 @@
+/*
+ * Celestial design tokens.
+ * Like a WPA park poster, the whole app is limited to five inks at a time.
+ * The inks follow the sun: set data-phase on <html> to night | dawn | day | dusk.
+ */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Doto:wght@700;900&family=Londrina+Solid:wght@300;400;900&display=swap');
+
+:root,
+:root[data-phase='night'] {
+  --ink-ground: #0e1524; /* ink navy: the sky */
+  --ink-type: #f1e6c8; /* cream paper: lettering, line work, the ISS */
+  --ink-planet: #5b6fb5; /* periwinkle: the planet and large shapes */
+  --ink-planet-shade: #2a3558; /* the planet's night side */
+  --ink-aurora: #9bd24a; /* poster green: aurora only */
+  --ink-fire: #e8743b; /* orange: fireballs only */
+}
+:root[data-phase='dawn'] {
+  --ink-ground: #2b2545;
+  --ink-type: #f7e4c6;
+  --ink-planet: #d98c8c;
+  --ink-planet-shade: #6b4a63;
+  --ink-aurora: #a8d672;
+  --ink-fire: #f29e4c;
+}
+:root[data-phase='day'] {
+  --ink-ground: #a9d3e0;
+  --ink-type: #1b2a3a;
+  --ink-planet: #6a6fc0;
+  --ink-planet-shade: #3d4284;
+  --ink-aurora: #4e8f3a;
+  --ink-fire: #d9531e;
+}
+:root[data-phase='dusk'] {
+  --ink-ground: #2b2622;
+  --ink-type: #f4ead0;
+  --ink-planet: #7c89ad;
+  --ink-planet-shade: #454c63;
+  --ink-aurora: #5fcdb5;
+  --ink-fire: #e0a23c;
+}
+
+:root {
+  --font-poster: 'Londrina Solid', 'Arial Narrow', sans-serif; /* wordmark, titles, labels, sentences */
+  --font-dot: 'Doto', ui-monospace, monospace; /* every number, time and coordinate */
+  --font-ascii: 'DM Mono', ui-monospace, monospace; /* ASCII sprites: the things that move */
+
+  --rule: 2px; /* every outline and divider; posters have no hairlines */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+  --space-6: 64px;
+
+  /* ink changes are a slow cross-fade, like light changing, never a snap */
+  --phase-fade: 1200ms ease;
+}
+
+html,
+body {
+  background: var(--ink-ground);
+  color: var(--ink-type);
+  transition:
+    background-color var(--phase-fade),
+    color var(--phase-fade);
+}
+
+.cel-poster {
+  font-family: var(--font-poster);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cel-dot {
+  font-family: var(--font-dot);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.cel-ascii {
+  font-family: var(--font-ascii);
+  white-space: pre;
+  line-height: 1;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --phase-fade: 0ms;
+  }
+}

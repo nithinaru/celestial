@@ -2,6 +2,7 @@ import './style.css';
 import { getSkyEvents, watchIss, type SkyEvent } from './data/skyEvents';
 import { createGlobe } from './globe/createGlobe';
 import { subsolarPoint, type LatLng } from './sky/sun';
+import { mountUI } from './ui/mount';
 
 // App state lives here; the Paper design will render UI from it.
 export const state: {
@@ -17,6 +18,7 @@ export const state: {
   sunOverridden: false,
 };
 
+const ui = mountUI();
 const globe = createGlobe(document.querySelector<HTMLDivElement>('#globe')!);
 
 const setSun = (sun: LatLng, overridden: boolean) => {
@@ -42,6 +44,7 @@ globe.onSelect((event) => {
 
 state.events = await getSkyEvents();
 globe.setEvents(state.events);
+ui.setEvents(state.events);
 watchIss((iss, trail) => globe.setIss(iss, trail));
 
 const counts = state.events.reduce<Record<string, number>>(
