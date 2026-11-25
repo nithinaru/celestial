@@ -5,6 +5,8 @@ import { angularDistance, darkness, wrapLng, type LatLng } from '../sky/sun';
 import { createArmillary } from './armillary';
 import { createClouds } from './clouds';
 import { createDayNightMaterial } from './dayNightMaterial';
+import { createLabels, fireballStar, issDiamond, nightHandle, type Touchable } from './interactive';
+import { createAsciiLayer } from './asciiLayer';
 import { createAuroraCurtain, createFireballMarks } from './marks';
 
 export interface SkyGlobe {
@@ -83,10 +85,41 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     return best;
   };
   let fireballTime = Date.now();
+  let shownFireballs: SkyEvent[] = [];
   const showFireballs = () => {
-    const shown = fireballs.filter((e) => Date.parse(e.time) <= fireballTime);
-    fireballMarks.setShown(shown, lit);
-    globe.objectsData(shown);
+    shownFireballs = fireballs.filter((e) => Date.parse(e.time) <= fireballTime);
+    fireballMarks.setShown(shownFireballs, lit);
+    ascii.setFireballs(shownFireballs, lit);
+    refreshObjects();
+  };
+
+  // Everything you can touch is a solid object in globe.gl's objects layer: the layer places it,
+  // raycasts it for hover and click, and hides it behind the planet. See interactive.ts.
+  const touchables = new Map<object, Touchable>();
+  const touchableFor = (d: object): Touchable => {
+    let t = touchables.get(d);
+    if (!t) {
+      const ev = d as SkyEvent;
+      t =
+        (d as Handle).kind === 'handle'
+          ? nightHandle()
+          : ev.type === 'iss'
+            ? issDiamond(ev.label)
+            : fireballStar(5 + Math.log10(1 + ev.intensity) * 6, ev.label, (ev.lng + ev.lat) * 0.7); // world units; globe radius 100
+      touchables.set(d, t);
+    }
+    return t;
+  };
+  const alphaFor = (d: object) => {
+    if ((d as Handle).kind === 'handle') return 1;
+    return lit(d as SkyEvent) * eventsIntro;
+  };
+  const refreshObjects = () => {
+    const data: object[] = [...shownFireballs, ...(issEl ? [issEl] : []), ...handles];
+    const keep = new Set(data);
+    for (const d of touchables.keys()) if (!keep.has(d)) touchables.delete(d);
+    for (const d of data) touchableFor(d).setAlpha(alphaFor(d));
+    globe.objectsData(data);
   };
 
   const { material, loaded } = createDayNightMaterial();
@@ -95,24 +128,22 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     { kind: 'handle', side: 'dawn', lat: 0, lng: 0 },
   ];
   let issEl: SkyEvent | null = null;
-  let issDot: HTMLElement | null = null;
 
   const globe = new Globe(el, { animateIn: false })
     .globeMaterial(material)
     // the sky is the page's ground ink (see ui/tokens.css), not a photo
     .backgroundColor('rgba(0,0,0,0)')
     .showAtmosphere(false)
-    // fireball stars live in the objects layer so hover labels and clicks keep working
+    // fireball stars, the ISS and the night handles: solid objects, each facing out from the ground
     .objectLat('lat')
     .objectLng('lng')
-    .objectAltitude(0.012)
-    .objectFacesSurface(false)
-    .objectThreeObject((d) => fireballMarks.sprite(d as SkyEvent))
-    .objectLabel((d) => (d as SkyEvent).label)
-    .onObjectClick((d) => selectCb(d))
-    .onObjectHover((d) => {
-      fireballMarks.hover(d ? (d as SkyEvent).id : null);
-      el.style.cursor = d ? 'pointer' : '';
+    .objectAltitude((d) => ((d as Handle).kind === 'handle' ? 0.01 : (d as SkyEvent).type === 'iss' ? 0.06 : 0.012))
+    .objectFacesSurface(true)
+    .objectThreeObject((d) => touchableFor(d).root)
+    .objectLabel(() => '') // labels are printed in the scene instead (createLabels)
+    .onObjectHover((d) => setHovered(d ? touchables.get(d) ?? null : null, d))
+    .onObjectClick((d) => {
+      if ((d as Handle).kind !== 'handle') selectCb(d);
     })
     .onGlobeClick((p) => {
       const hit = pickAurora(p);
@@ -122,12 +153,6 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
         onSelect(null);
       }
     })
-    // ISS diamond + night-line handles share the html layer
-    .htmlLat('lat')
-    .htmlLng('lng')
-    .htmlAltitude((d) => ((d as Handle).kind === 'handle' ? 0.01 : 0.06))
-    .htmlTransitionDuration(0)
-    .htmlElement((d) => ((d as Handle).kind === 'handle' ? handleEl(d as Handle) : issElement(d)))
     // ISS trail
     .pathPoints((d) => d as LatLng[])
     .pathPointLat('lat')
@@ -142,51 +167,96 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
 
   const fireballMarks = createFireballMarks(globe);
   const curtain = createAuroraCurtain(globe);
+  const ascii = createAsciiLayer(globe); // the Paper tapestry sprites, printed into the scene
   const clouds = createClouds(globe);
 
-  function issElement(d: object) {
-    issDot = document.createElement('div');
-    issDot.className = 'iss-dot';
-    issDot.title = (d as SkyEvent).label;
-    issDot.onclick = () => selectCb(d);
-    // the globe counts a click from pointerdown on its container; don't let it also see an empty-globe click
-    issDot.onpointerdown = (e) => e.stopPropagation();
-    return issDot;
-  }
   const issOpacity = () => {
-    if (issEl && issDot) issDot.style.opacity = String(lit(issEl) * eventsIntro);
+    if (issEl) touchableFor(issEl).setAlpha(alphaFor(issEl));
   };
 
-  function handleEl(h: Handle) {
-    const node = document.createElement('div');
-    node.className = 'night-handle';
-    node.title = 'Drag to move the night · double-click for real time';
-    node.onpointerdown = (down) => {
+  // ---- hover: one thing at a time; it gets its own move, and a label rises out of it
+  const labels = createLabels(globe.scene());
+  let hovered: Touchable | null = null;
+  let hoveredDatum: object | null = null;
+  let dragging: { t: Touchable; h: Handle } | null = null;
+  function setHovered(t: Touchable | null, d: object | null) {
+    if (dragging) return; // a handle being dragged keeps the pointer's attention
+    if (t === hovered) return;
+    if (hovered) {
+      hovered.setHover(false);
+      labels.hide(hovered.root);
+    }
+    hovered = t;
+    hoveredDatum = t ? d : null;
+    if (t) {
+      t.setHover(true);
+      labels.show(t.root, t.label);
+    }
+    fireballMarks.setHovered(t?.kind === 'fireball' ? (d as SkyEvent).id : null);
+    ascii.hoverFireball(t?.kind === 'fireball' ? (d as SkyEvent).id : null);
+    ascii.hoverIss(t?.kind === 'iss');
+    el.style.cursor = !t ? '' : t.kind === 'handle' ? 'grab' : 'pointer';
+  }
+
+  // dragging a night handle: grab it before OrbitControls sees the press
+  el.addEventListener(
+    'pointerdown',
+    (down) => {
+      if (hovered?.kind !== 'handle' || !hoveredDatum) return;
       down.preventDefault();
       down.stopPropagation();
-      globe.controls().enabled = false;
+      dragging = { t: hovered, h: hoveredDatum as Handle };
+      dragging.t.setActive(true);
+      el.style.cursor = 'grabbing';
       const rect = el.getBoundingClientRect();
       const move = (e: PointerEvent) => {
         const p = globe.toGlobeCoords(e.clientX - rect.left, e.clientY - rect.top);
-        if (p) onSunDrag({ lat: sun.lat, lng: wrapLng(p.lng - SIDE_OFFSET[h.side]) });
+        if (p && dragging) onSunDrag({ lat: sun.lat, lng: wrapLng(p.lng - SIDE_OFFSET[dragging.h.side]) });
       };
       const up = () => {
-        globe.controls().enabled = true;
+        dragging?.t.setActive(false);
+        dragging = null;
+        el.style.cursor = hovered?.kind === 'handle' ? 'grab' : '';
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
-    };
-    node.ondblclick = () => onSunDrag(null);
-    return node;
-  }
+    },
+    { capture: true },
+  );
+  // over bare globe, the ASCII aurora answers: it surges under the pointer
+  let groundRaf = 0;
+  let groundAt: { x: number; y: number } | null = null;
+  el.addEventListener('pointermove', (e) => {
+    const r = el.getBoundingClientRect();
+    groundAt = { x: e.clientX - r.left, y: e.clientY - r.top };
+    groundRaf ||= requestAnimationFrame(() => {
+      groundRaf = 0;
+      ascii.hoverGround(!hovered && groundAt ? globe.toGlobeCoords(groundAt.x, groundAt.y) : null);
+    });
+  });
+  el.addEventListener('pointerleave', () => ascii.hoverGround(null));
+  el.addEventListener('dblclick', () => {
+    if (hovered?.kind === 'handle') onSunDrag(null);
+  });
 
   const armillary = createArmillary(globe);
   globe.pointOfView({ lat: 24, lng: -30, altitude: 2.9 }); // tilted so the rings open into ellipses
   window.addEventListener('celestial:view', (e) => {
     view = (e as CustomEvent<'armillary' | 'horizon'>).detail;
     armillary.setView(view);
+  });
+
+  // the selected fireball stays raised while its card is open
+  let selectedStar: Touchable | null = null;
+  window.addEventListener('celestial:select', (e) => {
+    const ev = (e as CustomEvent<SkyEvent | null>).detail;
+    selectedStar?.setActive(false);
+    selectedStar = null;
+    ascii.select(ev?.type === 'fireball' ? ev.id : null);
+    if (ev?.type === 'fireball')
+      for (const [d, t] of touchables) if ((d as SkyEvent).id === ev.id) (selectedStar = t).setActive(true);
   });
 
   // slow turn until someone takes hold of the globe
@@ -198,7 +268,12 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
   // one clock for the draw-in and the aurora shimmer
   let introStart = Infinity;
   loaded.then(() => (introStart = performance.now()));
+  let lastFrame = 0;
   const frame = (now: number) => {
+    const dt = lastFrame ? Math.min((now - lastFrame) / 1000, 0.1) : 1 / 60;
+    lastFrame = now;
+    for (const t of touchables.values()) t.tick(dt, now / 1000);
+    labels.tick(dt);
     const ms = now - introStart;
     armillary.setIntro(phase(ms, INTRO.rings));
     material.uniforms.coastTrace.value = phase(ms, INTRO.coast) * 1.001;
@@ -209,15 +284,14 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       eventsIntro = ev;
       armillary.setEventsIntro(ev);
       fireballMarks.setIntro(ev);
-      issOpacity();
+      ascii.setIntro(ev);
+      for (const [d, t] of touchables) t.setAlpha(alphaFor(d));
     }
     curtain.frame(now / 1000, eventsIntro, el.clientHeight * (window.devicePixelRatio || 1));
-    fireballMarks.frame(now / 1000);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
 
-  const refreshHtml = () => globe.htmlElementsData(issEl ? [issEl, ...handles] : handles);
 
   // centre the star-chart backdrop (style.css #globe::before) on the Earth as actually drawn
   const centreBackdrop = () => {
@@ -239,13 +313,15 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       showFireballs();
       aurora = events.filter((e) => e.type === 'aurora');
       curtain.setEvents(aurora);
+      ascii.setAurora(aurora, sun);
     },
     setIss(iss, trail) {
-      // keep one object so globe.gl reuses the html element instead of rebuilding it each second
+      // keep one object so globe.gl reuses the ISS object instead of rebuilding it each second
       issEl = Object.assign(issEl ?? {}, iss);
-      refreshHtml();
+      refreshObjects();
       globe.pathsData([trail]);
       armillary.setOrbit(trail);
+      ascii.setIss(issEl, trail);
       issOpacity();
     },
     setSun(next, date = new Date()) {
@@ -258,11 +334,12 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       clouds.setSun(dir);
 
       for (const h of handles) h.lng = wrapLng(sun.lng + SIDE_OFFSET[h.side]);
-      refreshHtml();
 
       // every event picks up the new darkness
-      fireballMarks.setShown(fireballs.filter((e) => Date.parse(e.time) <= fireballTime), lit);
-      issOpacity();
+      fireballMarks.setShown(shownFireballs, lit);
+      ascii.setFireballs(shownFireballs, lit);
+      ascii.setAurora(aurora, sun);
+      refreshObjects();
     },
     onSelect(cb) {
       onSelect = cb;

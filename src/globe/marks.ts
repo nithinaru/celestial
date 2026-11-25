@@ -7,8 +7,6 @@ import {
   LineSegments,
   Points,
   ShaderMaterial,
-  Sprite,
-  SpriteMaterial,
   Vector3,
   type Scene,
 } from 'three';
@@ -155,12 +153,11 @@ export function createAuroraCurtain(globe: GlobeLike) {
 }
 
 /**
- * Fireballs: a four-point star sized by impact energy, plus a short streak along the real
- * entry direction (JPL's pre-entry velocity), drawn from where it came in toward where it burst.
+ * Fireballs: the short streak along the real entry direction (JPL's pre-entry velocity), drawn
+ * from where it came in toward where it burst. The star itself is a solid object (interactive.ts).
  */
 export function createFireballMarks(globe: GlobeLike) {
   const fire = () => cssInk('--ink-fire', '#e8743b');
-  const starTexture = drawStar(fire());
 
   const streakMat = new LineBasicMaterial({
     vertexColors: true,
@@ -173,23 +170,7 @@ export function createFireballMarks(globe: GlobeLike) {
   let shown: SkyEvent[] = [];
   let alphaOf: (e: SkyEvent) => number = () => 1;
   let intro = 0;
-
-  const sprites = new Map<string, Sprite>();
   let hovered: string | null = null;
-  const sizeOf = (e: SkyEvent) => 5 + Math.log10(1 + e.intensity) * 7; // world units; globe radius 100
-
-  /** star sprite for globe.gl's objects layer (keeps hover labels and clicks working) */
-  const sprite = (e: SkyEvent) => {
-    let s = sprites.get(e.id);
-    if (!s) {
-      s = new Sprite(new SpriteMaterial({ map: starTexture, transparent: true, depthWrite: false }));
-      const size = sizeOf(e);
-      s.scale.set(size, size, 1);
-      sprites.set(e.id, s);
-    }
-    (s.material as SpriteMaterial).opacity = alphaOf(e) * intro;
-    return s;
-  };
 
   const rebuildStreaks = () => {
     const pos: number[] = [];
@@ -202,7 +183,8 @@ export function createFireballMarks(globe: GlobeLike) {
       const from = { lat: e.lat - dir.north * len, lng: e.lng - (dir.east * len) / Math.cos(e.lat * RAD) };
       const a = globe.getCoords(from.lat, from.lng, 0.03);
       const b = globe.getCoords(e.lat, e.lng, 0.012);
-      const alpha = alphaOf(e) * intro;
+      // the hovered fireball's trail burns at full strength
+      const alpha = Math.min(1, alphaOf(e) * intro * (e.id === hovered ? 1.8 : 1));
       pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
       col.push(c.r, c.g, c.b, alpha * 0.25, c.r, c.g, c.b, alpha); // brightens toward the burst
     }
@@ -214,39 +196,27 @@ export function createFireballMarks(globe: GlobeLike) {
   };
 
   return {
-    sprite,
-    /** a slow twinkle: each star breathes on its own phase, so the field never looks frozen */
-    /** the hovered star swells, so the pointer always knows what it is over */
-    hover(id: string | null) {
-      hovered = id;
-    },
-    frame(timeSec: number) {
-      for (const e of shown) {
-        const s = sprites.get(e.id);
-        if (!s) continue;
-        const k =
-          sizeOf(e) * (e.id === hovered ? 1.8 : 1 + 0.14 * Math.sin(timeSec * 2.1 + (e.lng + e.lat) * 0.7));
-        s.scale.set(k, k, 1);
-      }
-    },
     /** which fireballs are on the globe, and how visible each one is (darkness) */
     setShown(events: SkyEvent[], alpha: (e: SkyEvent) => number) {
       shown = events;
       alphaOf = alpha;
-      for (const e of shown) sprite(e);
       rebuildStreaks();
     },
     setIntro(p: number) {
       if (p === intro) return;
       intro = p;
-      for (const e of shown) sprite(e);
+      rebuildStreaks();
+    },
+    setHovered(id: string | null) {
+      if (id === hovered) return;
+      hovered = id;
       rebuildStreaks();
     },
   };
 }
 
 /** Unit heading of the fireball's path over the ground, from JPL's Earth-fixed velocity. */
-function entryHeading(e: SkyEvent): { north: number; east: number } | null {
+export function entryHeading(e: SkyEvent): { north: number; east: number } | null {
   const { vx, vy, vz } = e.details;
   if (typeof vx !== 'number' || typeof vy !== 'number' || typeof vz !== 'number') return null;
   const [la, lo] = [e.lat * RAD, e.lng * RAD];
@@ -254,24 +224,4 @@ function entryHeading(e: SkyEvent): { north: number; east: number } | null {
   const north = -Math.sin(la) * Math.cos(lo) * vx - Math.sin(la) * Math.sin(lo) * vy + Math.cos(la) * vz;
   const len = Math.hypot(east, north);
   return len < 1e-6 ? null : { east: east / len, north: north / len };
-}
-
-function drawStar(color: string): CanvasTexture {
-  const S = 128;
-  const c = document.createElement('canvas');
-  c.width = c.height = S;
-  const x = c.getContext('2d')!;
-  const m = S / 2;
-  const outer = S * 0.48;
-  const inner = S * 0.09;
-  x.beginPath();
-  for (let i = 0; i < 8; i++) {
-    const r = i % 2 === 0 ? outer : inner;
-    const a = (i * Math.PI) / 4 - Math.PI / 2;
-    x.lineTo(m + Math.cos(a) * r, m + Math.sin(a) * r);
-  }
-  x.closePath();
-  x.fillStyle = color;
-  x.fill();
-  return new CanvasTexture(c);
 }
