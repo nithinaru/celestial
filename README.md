@@ -18,7 +18,9 @@ npm run dev
 | `src/ui/timeSlider.ts` | bare fireball time scrubber |
 | `src/ui/detailCard.ts` | bare event detail card |
 | `src/main.ts` | wires data → globe, holds `state` |
-| `api/fireball.ts` | Vercel function proxying JPL (no CORS); `vite.config.ts` mirrors it in dev |
+| `api/fireball.ts` | Vercel function proxying JPL (no CORS), CDN-cached 1 h |
+| `api/iss.ts` | Vercel function proxying CelesTrak, CDN-cached 2 h (CelesTrak blocks repeat downloads with 403) |
+| `server/proxyJson.ts` | shared proxy helper; failures return 502 uncached so the client uses its fallback |
 | `public/fallback/*.json` | snapshots used when a live feed fails, so the demo never breaks |
 
 ## Hooking up UI
@@ -52,4 +54,6 @@ The time slider (`src/ui/timeSlider.ts`, a plain `<input type="range">`) scrubs 
 
 - Aurora: NOAA SWPC OVATION (points with probability ≥ 10, strongest per 2° cell)
 - Fireballs: NASA JPL CNEOS fireball API, latest 200
-- ISS: CelesTrak orbital elements, propagated in the browser with satellite.js
+- ISS: CelesTrak orbital elements (via `/api/iss`), propagated in the browser with satellite.js
+
+`vite.config.ts` mirrors both `/api` routes in dev.
