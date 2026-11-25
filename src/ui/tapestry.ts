@@ -25,10 +25,14 @@ const INK: Record<string, string> = {
 };
 
 let data: Promise<Record<TapestryKind, SpriteDef>> | null = null;
+let ready = false;
 const load = () =>
   (data ??= fetch('/sprites/tapestry.json')
     .then((r) => r.json())
-    .then((j: { sprites: Record<TapestryKind, SpriteDef> }) => j.sprites));
+    .then((j: { sprites: Record<TapestryKind, SpriteDef> }) => ((ready = true), j.sprites)));
+
+const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 export interface Tapestry {
   el: HTMLCanvasElement;
@@ -47,7 +51,8 @@ export function createTapestry(kind: TapestryKind, { cell = 4, fps = 4 } = {}): 
   let def: SpriteDef | null = null;
   let i = 0;
   let size = cell;
-  let timer = 0;
+  let raf = 0;
+  let zoom: Animation | null = null;
 
   const draw = () => {
     if (!def) return;
@@ -95,22 +100,67 @@ export function createTapestry(kind: TapestryKind, { cell = 4, fps = 4 } = {}): 
     }
   };
 
+  // Frame stepping on rAF with an accumulator: holds the beat without drifting, and sleeps
+  // while the tab is hidden instead of piling up ticks.
+  const step = 1000 / fps;
+  let last = 0;
+  let acc = 0;
+  let stopped = false;
+  const loop = (now: number) => {
+    raf = 0;
+    if (stopped || !def) return;
+    if (document.hidden) return; // resumed by the visibilitychange listener
+    if (last) acc += Math.min(now - last, step * 2); // a long stall advances one frame, not ten
+    last = now;
+    if (acc >= step) {
+      acc %= step;
+      i = (i + 1) % def.frames.length;
+      draw();
+    }
+    raf = requestAnimationFrame(loop);
+  };
+  const wake = () => {
+    if (stopped || raf || document.hidden || reduced.matches || !def) return;
+    last = 0;
+    raf = requestAnimationFrame(loop);
+  };
+  document.addEventListener('visibilitychange', wake);
+
+  const coldStart = !ready;
   void load().then((sprites) => {
+    if (stopped) return;
     def = sprites[kind];
     draw();
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-      timer = window.setInterval(() => {
-        i = (i + 1) % def!.frames.length;
-        draw();
-      }, 1000 / fps);
+    // first visit only: the picture arrives after the card, so let it ink in rather than pop
+    if (coldStart) canvas.animate({ opacity: [0, 1] }, { duration: 200, easing: EASE_OUT });
+    wake();
   });
 
   return {
     el: canvas,
     setCell(px) {
+      if (px === size) return;
+      // How big the picture looks right now, mid-zoom included.
+      const m = getComputedStyle(canvas).transform.match(/^matrix\(([^,]+)/);
+      const shown = size * (m ? parseFloat(m[1]) : 1);
+      zoom?.cancel();
       size = px;
       draw();
+      if (!def) return;
+      // Redrawn crisp at the new size; ease from the old apparent size so the zoom reads as one move.
+      // Additive, so it rides on the CSS centring translate and the hover scale.
+      zoom = reduced.matches
+        ? canvas.animate({ opacity: [0.6, 1] }, { duration: 150, easing: EASE_OUT })
+        : canvas.animate(
+            { transform: [`scale(${shown / px})`, 'scale(1)'] },
+            { duration: 300, easing: EASE_OUT, composite: 'add' },
+          );
     },
-    stop: () => window.clearInterval(timer),
+    stop: () => {
+      stopped = true;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      document.removeEventListener('visibilitychange', wake);
+    },
   };
 }

@@ -17,7 +17,8 @@
 .cel-card {
   pointer-events: auto;
 }
-.cel-ui * {
+.cel-ui *,
+.cel-ui *::before {
   transition:
     color var(--phase-fade),
     background-color var(--phase-fade),
@@ -171,7 +172,7 @@
 }
 
 /* the card takes the legend's place while it is open */
-.cel-ui:has(.cel-card) .cel-legend {
+.cel-ui:has(.cel-card:not([aria-hidden])) .cel-legend {
   display: none;
 }
 
@@ -374,11 +375,8 @@
 }
 
 /* ---------- motion: let the interface speak, not the words ----------
-   Everything settles on the same soft spring, so the UI feels like one liquid material. */
-.cel-ui {
-  --spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1);
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-}
+   Everything settles on the same soft spring, so the UI feels like one liquid material.
+   Curves and durations live in tokens.css (--spring, --ease-out, --dur-*). */
 
 /* scrubber: lines, and one small time */
 .cel-scrubber {
@@ -396,11 +394,15 @@
   font-size: 15px;
   line-height: 1;
   letter-spacing: 0.06em;
-  transition: transform 500ms var(--spring);
+  /* release settles back; the grab (below) answers faster */
+  transition:
+    transform 280ms var(--ease-out),
+    color 160ms ease;
 }
 .cel-scrubber.is-dragging .cel-scrubber__time {
   transform: scale(1.5) translateY(2px);
   color: var(--ink-fire);
+  transition-duration: 160ms;
 }
 
 /* view switch: the cream pill slides between the two words */
@@ -411,22 +413,28 @@
   position: absolute;
   inset: 0 50% 0 0;
   background: var(--ink-type);
-  transition: inset 520ms var(--spring);
+  /* slide with transform (one half-width step), not by animating inset */
+  transition:
+    transform var(--dur-spring) var(--spring),
+    background-color var(--phase-fade);
 }
 .cel-views[data-view='horizon'] .cel-views__pill {
-  inset: 0 0 0 50%;
+  transform: translateX(100%);
 }
 .cel-views__btn {
   position: relative;
   flex: 1;
   text-align: center;
-  transition: color 300ms var(--ease), transform 400ms var(--spring);
+  transition:
+    color var(--dur-base) ease,
+    transform var(--dur-base) var(--ease-out);
 }
 .cel-views__btn[aria-pressed='true'] {
   background: none;
 }
 .cel-views__btn:active {
-  transform: scale(0.94);
+  transform: scale(0.97);
+  transition-duration: var(--dur-base), var(--dur-press); /* the press lands faster than the release */
 }
 
 /* counter: the number breathes when you touch it */
@@ -436,16 +444,22 @@
 }
 .cel-counter__n {
   transform-origin: left bottom;
-  transition: transform 700ms var(--spring);
-}
-.cel-counter:hover .cel-counter__n {
-  transform: scale(1.08) rotate(-2deg);
+  transition:
+    transform var(--dur-spring) var(--spring),
+    color var(--phase-fade);
 }
 .cel-counter__words {
-  transition: transform 700ms var(--spring) 40ms;
+  transition:
+    transform var(--dur-spring) var(--spring) 30ms,
+    color var(--phase-fade);
 }
-.cel-counter:hover .cel-counter__words {
-  transform: translateX(10px);
+@media (hover: hover) and (pointer: fine) {
+  .cel-counter:hover .cel-counter__n {
+    transform: scale(1.08) rotate(-2deg);
+  }
+  .cel-counter:hover .cel-counter__words {
+    transform: translateX(10px);
+  }
 }
 
 /* legend: four marks; the words pour out only when you reach for one */
@@ -473,63 +487,91 @@
   white-space: nowrap;
   opacity: 0;
   transform: translateX(14px);
+  /* max-width is a layout property, but a clip-path reveal would leave an invisible
+     hover target over the globe; four tiny rows, so it stays, just quicker */
   transition:
-    max-width 600ms var(--ease),
-    opacity 300ms var(--ease),
-    transform 600ms var(--spring);
+    max-width var(--dur-base) var(--ease-out),
+    opacity var(--dur-quick) var(--ease-out),
+    transform var(--dur-spring) var(--spring),
+    color var(--phase-fade);
 }
-.cel-legend__row:hover .cel-legend__text,
 .cel-legend:focus-within .cel-legend__text {
   max-width: 160px;
   opacity: 1;
   transform: none;
 }
 .cel-legend__mark::before {
-  transition: transform 600ms var(--spring);
+  transition:
+    transform var(--dur-spring) var(--spring),
+    background-color var(--phase-fade);
 }
-.cel-legend__row:hover .cel-legend__mark::before {
-  transform: scale(1.35);
-}
-.cel-legend__row:hover .cel-legend__mark--iss::before {
-  transform: rotate(135deg) scale(1.35);
+@media (hover: hover) and (pointer: fine) {
+  .cel-legend__row:hover .cel-legend__text {
+    max-width: 160px;
+    opacity: 1;
+    transform: none;
+  }
+  .cel-legend__row:hover .cel-legend__mark::before {
+    transform: scale(1.35);
+  }
+  .cel-legend__row:hover .cel-legend__mark--iss::before {
+    transform: rotate(135deg) scale(1.35);
+  }
 }
 
 /* card: unrolls like a poster being pinned up, rows follow one after another */
+/* one-shot per mounted card (each selection mounts a fresh element), so keyframes are fine;
+   whole entrance lands in ~440ms: pin 420ms, rows 30ms apart finishing by 180 + 260ms */
 .cel-card {
   transform-origin: top right;
-  animation: cel-pin 720ms var(--spring) both;
+  animation: cel-pin 420ms var(--spring) both;
 }
 .cel-card__body > *,
 .cel-card__row {
-  animation: cel-rise 620ms var(--ease) both;
+  animation: cel-rise 260ms var(--ease-out) both;
 }
-.cel-card__body > :nth-child(1) { animation-delay: 90ms; }
-.cel-card__body > :nth-child(2) { animation-delay: 140ms; }
-.cel-card__body > :nth-child(3) { animation-delay: 190ms; }
-.cel-card__row:nth-child(1) { animation-delay: 250ms; }
-.cel-card__row:nth-child(2) { animation-delay: 310ms; }
-.cel-card__row:nth-child(3) { animation-delay: 370ms; }
+.cel-card__body > :nth-child(1) { animation-delay: 30ms; }
+.cel-card__body > :nth-child(2) { animation-delay: 60ms; }
+.cel-card__body > :nth-child(3) { animation-delay: 90ms; }
+.cel-card__row:nth-child(1) { animation-delay: 120ms; }
+.cel-card__row:nth-child(2) { animation-delay: 150ms; }
+.cel-card__row:nth-child(3) { animation-delay: 180ms; }
+@media (max-width: 1100px) {
+  .cel-card {
+    transform-origin: bottom center; /* here the card rises from a bottom slot */
+  }
+}
 .cel-meter span {
-  transition: transform 500ms var(--spring);
+  transition:
+    transform var(--dur-base) var(--spring),
+    background-color var(--phase-fade),
+    border-color var(--phase-fade);
 }
-.cel-card__row:hover .cel-meter span.is-on {
-  transform: translateY(-3px);
-}
-.cel-meter span:nth-child(2n) { transition-delay: 30ms; }
-.cel-meter span:nth-child(3n) { transition-delay: 60ms; }
+.cel-meter span:nth-child(2n) { transition-delay: 30ms, 0ms, 0ms; }
+.cel-meter span:nth-child(3n) { transition-delay: 60ms, 0ms, 0ms; }
 .cel-card__art .cel-tapestry {
-  transition: scale 700ms var(--spring);
-}
-.cel-card__art:hover .cel-tapestry {
-  scale: 1.06;
+  transition: scale var(--dur-spring) var(--spring);
 }
 .cel-card__hint {
   transform: translateY(100%);
-  transition: transform 450ms var(--spring);
+  transition:
+    transform var(--dur-quick) var(--ease-out),
+    background-color var(--phase-fade),
+    color var(--phase-fade);
 }
-.cel-card__art:hover .cel-card__hint,
 .cel-card__art:focus-visible .cel-card__hint {
   transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cel-card__row:hover .cel-meter span.is-on {
+    transform: translateY(-3px);
+  }
+  .cel-card__art:hover .cel-tapestry {
+    scale: 1.06;
+  }
+  .cel-card__art:hover .cel-card__hint {
+    transform: none;
+  }
 }
 @keyframes cel-pin {
   from { opacity: 0; transform: translateY(18px) scale(0.94) rotate(1.5deg); }
@@ -537,18 +579,35 @@
 @keyframes cel-rise {
   from { opacity: 0; transform: translateY(10px); }
 }
+@keyframes cel-fade {
+  from { opacity: 0; }
+}
 
+/* reduced motion: fewer, gentler — fades and colour stay, movement goes.
+   Transforms still land on their end state (instantly), so no state is lost. */
 @media (prefers-reduced-motion: reduce) {
   .cel-ui *,
-  .cel-ui *::before {
-    animation: none !important;
-    transition-duration: 0ms !important;
+  .cel-ui *::before,
+  .night-handle {
+    transition-property: color, background-color, border-color, fill, opacity, outline-color !important;
+    transition-timing-function: ease !important;
+  }
+  .cel-ui .cel-card {
+    animation: cel-fade 180ms ease-out both !important;
+  }
+  .cel-card__body > *,
+  .cel-card__row {
+    animation: none;
+  }
+  .cel-scrubber.is-dragging .cel-scrubber__time {
+    transform: none; /* keep the colour change, drop the grow */
   }
 }
 
-/* horizon view: the counter lifts into the sky so it never sits on the planet */
+/* horizon view: the counter lifts into the sky so it never sits on the planet.
+   Rides with the globe camera (1400ms in-out tween), so it gets the slow in-out curve too. */
 .cel-counter {
-  transition: transform 1100ms var(--spring);
+  transition: transform 1000ms var(--ease-in-out);
 }
 .cel-ui[data-view='horizon'] .cel-counter {
   transform: translateY(calc(-100vh + 470px));

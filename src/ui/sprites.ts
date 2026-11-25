@@ -53,13 +53,41 @@ export function createSprite(kind: SpriteKind, { fps = 3, sizePx = 10 } = {}): S
   const draw = () => el.replaceChildren(frameToNodes(frames[i], inks[i]));
   draw();
 
+  // rAF with an accumulator rather than setInterval: no drift, and nothing runs while the tab
+  // is hidden. A long stall advances one frame, never a burst of them.
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const timer = still
-    ? 0
-    : window.setInterval(() => {
-        i = (i + 1) % frames.length;
-        draw();
-      }, 1000 / fps);
+  const step = 1000 / fps;
+  let raf = 0;
+  let last = 0;
+  let acc = 0;
+  let stopped = false;
+  const loop = (now: number) => {
+    raf = 0;
+    if (stopped || document.hidden) return;
+    if (last) acc += Math.min(now - last, step * 2);
+    last = now;
+    if (acc >= step) {
+      acc %= step;
+      i = (i + 1) % frames.length;
+      draw();
+    }
+    raf = requestAnimationFrame(loop);
+  };
+  const wake = () => {
+    if (stopped || still || raf || document.hidden) return;
+    last = 0;
+    raf = requestAnimationFrame(loop);
+  };
+  document.addEventListener('visibilitychange', wake);
+  wake();
 
-  return { el, stop: () => window.clearInterval(timer) };
+  return {
+    el,
+    stop: () => {
+      stopped = true;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      document.removeEventListener('visibilitychange', wake);
+    },
+  };
 }

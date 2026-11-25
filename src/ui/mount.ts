@@ -11,6 +11,29 @@ const h = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: st
   return node;
 };
 
+const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+/**
+ * Takes a card off the board without a snap: lifts it out of flow so the next card can take
+ * its place, fades it from wherever it is right now (mid pin-up included), then removes it.
+ */
+function leave(node: HTMLElement): void {
+  const cs = getComputedStyle(node);
+  const from = { opacity: cs.opacity, transform: cs.transform === 'none' ? 'none' : cs.transform };
+  node.getAnimations().forEach((a) => a.cancel());
+  Object.assign(node.style, { position: 'absolute', top: '0', right: '0', pointerEvents: 'none' });
+  node.setAttribute('aria-hidden', 'true');
+  node.inert = true;
+  const to = reduced.matches ? { opacity: 0 } : { opacity: 0, transform: 'translateY(-6px) scale(0.98)' };
+  const anim = node.animate([reduced.matches ? { opacity: from.opacity } : from, to], {
+    duration: 160,
+    easing: EASE_OUT,
+    fill: 'forwards',
+  });
+  anim.onfinish = anim.oncancel = () => node.remove();
+}
+
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const two = (n: number) => String(n).padStart(2, '0');
 
@@ -98,10 +121,27 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
   parent.append(root);
 
   let card: EventCard | null = null;
+  let shown: { id: string; place?: string } | null = null;
   const select = (event: SkyEvent | null, place?: string) => {
-    card?.destroy();
+    // the same event again (a second click on its marker) keeps the card as it is
+    if (event && shown && shown.id === event.id && shown.place === place) return;
+    const old = card;
+    old?.destroy();
     card = event ? createEventCard(event, place) : null;
-    cardSlot.replaceChildren(...(card ? [card.el] : []));
+    shown = event ? { id: event.id, place } : null;
+    if (old) leave(old.el);
+    if (!card) return;
+    cardSlot.append(card.el);
+    // swapping one card for another: a short settle instead of the full pin-up
+    if (old) {
+      card.el.style.animation = 'none';
+      card.el.animate(
+        reduced.matches
+          ? [{ opacity: 0 }, { opacity: 1 }]
+          : [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 220, easing: EASE_OUT },
+      );
+    }
   };
   window.addEventListener('celestial:select', (e) => select((e as CustomEvent<SkyEvent | null>).detail));
   window.addEventListener('keydown', (e) => e.key === 'Escape' && select(null));
@@ -117,7 +157,17 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
           .map((e) => `${e.lat >= 0 ? 'N' : 'S'}${Math.floor((e.lng + 180) / 30)}`),
       );
       const aurora = regions.size;
+      const was = big.textContent;
       big.textContent = String(aurora);
+      // a refreshed count ticks in; an unchanged one (or the first fill from 0) stays put
+      if (was !== big.textContent && was !== '0') {
+        const t = { duration: 240, easing: EASE_OUT };
+        big.getAnimations().forEach((a) => a instanceof CSSTransition || a.cancel());
+        big.animate({ opacity: [0, 1] }, t);
+        // additive, so the hover lift on the number is left alone
+        if (!reduced.matches)
+          big.animate({ transform: ['translateY(0.25em)', 'none'] }, { ...t, composite: 'add' });
+      }
       words.textContent = `${aurora === 1 ? 'region can' : 'regions can'} see the aurora right now`;
     },
   };
