@@ -51,8 +51,18 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
   let onSelect: (event: SkyEvent | null) => void = () => {};
   let onSunDrag: (sun: LatLng | null) => void = () => {};
   // globe.gl stashes its three.js objects on our data (__threeObj*); hand out a clean copy
-  const selectCb = (d: object) =>
-    onSelect(Object.fromEntries(Object.entries(d).filter(([k]) => !k.startsWith('__'))) as SkyEvent);
+  const selectCb = (d: object) => {
+    const e = Object.fromEntries(Object.entries(d).filter(([k]) => !k.startsWith('__'))) as SkyEvent;
+    flyTo(e);
+    onSelect(e);
+  };
+  // clicking an event flies the camera down to it; clicking empty globe pulls back out
+  let view: 'armillary' | 'horizon' = 'armillary';
+  const flyTo = (e: SkyEvent | null) => {
+    if (view !== 'armillary') return;
+    globe.controls().autoRotate = false;
+    globe.pointOfView(e ? { lat: e.lat, lng: e.lng, altitude: 1.45 } : { altitude: 2.9 }, 1300);
+  };
 
   let sun: LatLng = { lat: 0, lng: 0 };
   const lit = (p: LatLng) => DAY_OPACITY + (1 - DAY_OPACITY) * darkness(p, sun);
@@ -99,10 +109,17 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
     .objectThreeObject((d) => fireballMarks.sprite(d as SkyEvent))
     .objectLabel((d) => (d as SkyEvent).label)
     .onObjectClick((d) => selectCb(d))
+    .onObjectHover((d) => {
+      fireballMarks.hover(d ? (d as SkyEvent).id : null);
+      el.style.cursor = d ? 'pointer' : '';
+    })
     .onGlobeClick((p) => {
       const hit = pickAurora(p);
       if (hit) selectCb(hit);
-      else onSelect(null);
+      else {
+        flyTo(null);
+        onSelect(null);
+      }
     })
     // ISS diamond + night-line handles share the html layer
     .htmlLat('lat')
@@ -165,9 +182,10 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
 
   const armillary = createArmillary(globe);
   globe.pointOfView({ lat: 24, lng: -30, altitude: 2.9 }); // tilted so the rings open into ellipses
-  window.addEventListener('celestial:view', (e) =>
-    armillary.setView((e as CustomEvent<'armillary' | 'horizon'>).detail),
-  );
+  window.addEventListener('celestial:view', (e) => {
+    view = (e as CustomEvent<'armillary' | 'horizon'>).detail;
+    armillary.setView(view);
+  });
 
   // slow turn until someone takes hold of the globe
   const controls = globe.controls();
@@ -190,7 +208,7 @@ export function createGlobe(el: HTMLElement): SkyGlobe {
       fireballMarks.setIntro(ev);
       issOpacity();
     }
-    curtain.frame(now / 1000, eventsIntro);
+    curtain.frame(now / 1000, eventsIntro, el.clientHeight * (window.devicePixelRatio || 1));
     fireballMarks.frame(now / 1000);
     requestAnimationFrame(frame);
   };

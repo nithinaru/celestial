@@ -1,4 +1,4 @@
-import { CanvasTexture, Color, LinearFilter, ShaderMaterial, Vector3 } from 'three';
+import { CanvasTexture, Color, LinearFilter, SRGBColorSpace, ShaderMaterial, TextureLoader, Vector2, Vector3 } from 'three';
 
 /**
  * The Earth as a plate from an old astronomy atlas: flat ink, no lighting, no shine.
@@ -22,6 +22,10 @@ export function createDayNightMaterial() {
   const material = new ShaderMaterial({
     uniforms: {
       landMask: { value: null },
+      // elevation (three-globe's topology map) and the satellite photo, read as data only
+      topo: { value: null },
+      topoTexel: { value: new Vector2(1.5 / 2048, 1.5 / 1024) },
+      photo: { value: null },
       sunDirection: { value: new Vector3(1, 0, 0) },
       ground: { value: new Color() },
       oceanDay: { value: new Color() },
@@ -45,7 +49,8 @@ export function createDayNightMaterial() {
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform sampler2D landMask;
+      uniform sampler2D landMask, topo, photo;
+      uniform vec2 topoTexel;
       uniform vec3 sunDirection;
       uniform vec3 ground, oceanDay, oceanNight, landDay, landNight, line;
       uniform float coastTrace, fill;
@@ -70,13 +75,32 @@ export function createDayNightMaterial() {
         float isLand = smoothstep(0.5 - lw, 0.5 + lw, land);
         float coast = 1.0 - smoothstep(0.0, 1.0, abs(land - 0.5) / lw);
 
-        vec3 day = mix(oceanDay, landDay, isLand);
-        vec3 dark = mix(oceanNight, landNight, isLand);
+        // terrain: hill shading lit from the north-west, the printed-map convention, so ranges read
+        // as raised. Flat ground gets shade 0; slopes facing the light brighten, the rest darken.
+        float hgt = texture2D(topo, vUv).r;
+        float hx = texture2D(topo, vUv + vec2(topoTexel.x, 0.0)).r - texture2D(topo, vUv - vec2(topoTexel.x, 0.0)).r;
+        float hy = texture2D(topo, vUv + vec2(0.0, topoTexel.y)).r - texture2D(topo, vUv - vec2(0.0, topoTexel.y)).r;
+        vec3 L = normalize(vec3(-0.55, 0.55, 0.62));
+        float shade = dot(normalize(vec3(-hx * 7.0, -hy * 7.0, 1.0)), L) - L.z;
+
+        // land colour: the photo's own hue (sand deserts, green forests, white ice), desaturated
+        // and pulled toward cream so it stays in the ink palette
+        vec3 ph = texture2D(photo, vUv).rgb;
+        ph = mix(vec3(dot(ph, vec3(0.299, 0.587, 0.114))), ph, 0.7) * 1.35;
+        vec3 landTone = mix(landDay, ph, 0.55) * (1.0 + shade * 1.6);
+        vec3 landDark = landNight * (1.0 + shade * 1.3);
+
+        vec3 day = mix(oceanDay, landTone, isLand);
+        vec3 dark = mix(oceanNight, landDark, isLand);
         vec3 color = mix(ground, mix(day, dark, night), fill);
 
         // engraving: parallel diagonal cuts, night side only
         float hatch = hairline((vWorldPos.x + vWorldPos.y) / 4.5, 1.0);
         color = mix(color, line, hatch * night * 0.1 * fill);
+
+        // contour lines: one engraved rule every 1/16 of the elevation range, on land only
+        float contour = hairline(hgt * 16.0, 1.0) * isLand * step(0.03, hgt);
+        color = mix(color, mix(oceanNight, line, night), contour * 0.28 * fill);
 
         // graticule every 15°
         float grat = max(hairline(vUv.x * 24.0, 1.0), hairline(vUv.y * 12.0, 1.0));
@@ -137,6 +161,12 @@ export function createDayNightMaterial() {
     ready();
   };
   img.src = '/textures/earth-water.png'; // three-globe's water mask: sea ice counts as sea
+
+  const loader = new TextureLoader();
+  u.topo.value = loader.load('/textures/earth-topology.png');
+  const photo = loader.load('/textures/earth-day.jpg');
+  photo.colorSpace = SRGBColorSpace;
+  u.photo.value = photo;
 
   return { material, loaded };
 }
