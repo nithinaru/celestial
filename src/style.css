@@ -182,3 +182,69 @@ body {
     animation: none;
   }
 }
+
+/* "Watch the film" under the live stamp, and its player */
+.cel-film {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 7px 14px 6px 11px;
+  border: var(--rule, 2px) solid var(--ink-type, #f1e6c8);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-type, #f1e6c8);
+  font: 500 11px/1 var(--font-ascii, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+.cel-film::before {
+  content: '';
+  border-left: 7px solid currentColor;
+  border-top: 4.5px solid transparent;
+  border-bottom: 4.5px solid transparent;
+}
+.cel-film:hover {
+  background: var(--ink-type, #f1e6c8);
+  color: var(--ink-ground, #0e1524);
+}
+.cel-film:active {
+  transform: scale(0.97);
+}
+.cel-film:focus-visible {
+  outline: 2px solid var(--ink-aurora, #9bd24a);
+  outline-offset: 3px;
+}
+.cel-film__dialog {
+  width: min(92vw, 1100px);
+  padding: 0;
+  border: var(--rule, 2px) solid var(--ink-type, #f1e6c8);
+  background: #000;
+  color: var(--ink-type, #f1e6c8);
+  overflow: visible;
+}
+.cel-film__dialog::backdrop {
+  background: color-mix(in srgb, var(--ink-ground, #0e1524) 88%, transparent);
+}
+.cel-film__video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+.cel-film__close {
+  position: absolute;
+  top: -36px;
+  right: 0;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--ink-type, #f1e6c8);
+  font: 500 11px/1 var(--font-ascii, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}

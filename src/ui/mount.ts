@@ -62,6 +62,33 @@ export interface CelestialUI {
   select(event: SkyEvent | null, place?: string): void;
 }
 
+/** "Watch the film": the intro video in a native <dialog> (Esc and backdrop close it). */
+function film(): HTMLElement {
+  const btn = h('button', 'cel-film', 'Watch the film');
+  btn.type = 'button';
+  const dlg = h('dialog', 'cel-film__dialog');
+  const video = h('video', 'cel-film__video');
+  Object.assign(video, {
+    src: '/video/celestial-intro.mp4',
+    poster: '/video/celestial-intro.jpg',
+    controls: true,
+    playsInline: true,
+    preload: 'none',
+  });
+  const close = h('button', 'cel-film__close', 'Close');
+  close.type = 'button';
+  close.addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', (e) => e.target === dlg && dlg.close()); // backdrop
+  dlg.addEventListener('close', () => video.pause());
+  dlg.append(video, close);
+  btn.addEventListener('click', () => {
+    dlg.showModal();
+    void video.play().catch(() => {});
+  });
+  document.body.append(dlg);
+  return btn;
+}
+
 /**
  * Mounts all of the poster chrome over the globe. The globe keeps pointer events
  * everywhere except on the controls themselves.
@@ -80,6 +107,7 @@ export function mountUI(parent: HTMLElement = document.body): CelestialUI {
   mark.append(h('div', 'cel-wordmark__name cel-poster', 'Celestial'));
   // where every mark on the globe comes from, said plainly
   mark.append(h('div', 'cel-live', 'Live · NOAA · NASA JPL · CelesTrak'));
+  mark.append(film());
 
   // clock + view switch
   const top = h('div', 'cel-top');
